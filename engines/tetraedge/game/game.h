@@ -132,6 +132,7 @@ public:
 	bool onCharacterAnimationPlayerFinished(const Common::String &val);
 	bool onDialogFinished(const Common::String &val);
 	bool onDisplacementFinished();
+	bool onDisplacementPlayerFinished();
 	bool onFinishedCheckBackup(bool result);
 	bool onFinishedLoadingBackup(const Common::String &val);
 	bool onFinishedSavingBackup(int something);
@@ -204,6 +205,9 @@ public:
 	bool hasLoadName() const { return !_loadName.empty(); }
 	bool isArtworkUnlocked(const Common::String &name) const;
 	static Common::String artworkConfName(const Common::String &name);
+
+	void setRunModeEnabled(bool val) { _runModeEnabled = val; }
+	bool runModeEnabled() const { return _runModeEnabled; }
 
 private:
 	bool _luaShowOwnerError;
@@ -286,6 +290,9 @@ private:
 	TeVector3f32 _posPlayer;
 
 	Common::Point _lastUpdateMousePos;
+
+	// Syberia 2 specific data
+	bool _runModeEnabled;
 };
 
 } // end namespace Tetraedge

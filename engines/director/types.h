@@ -60,7 +60,7 @@ enum ScriptType {
 	kMovieScript = 2,
 	kEventScript = 3,
 	kTestScript = 4,
-	kMaxScriptType = 4	// Sync with cast.cpp:46, array scriptTypes[]
+	kMaxScriptType = 4	// Sync with types.cpp:28, array scriptTypes[]
 };
 
 enum ScriptFlag {
@@ -158,7 +158,7 @@ enum SpriteType {
 	kOutlinedOvalSprite				= 14,	// QuickDraw
 	kThickLineSprite				= 15,	// 2pt width line
 	kCastMemberSprite				= 16,	// Specified by cast member
-	kFilmLoopSpite					= 17,
+	kFilmLoopSprite					= 17,
 	kDirMovieSprite					= 18
 };
 
@@ -339,8 +339,7 @@ enum {
 	kFileVer1000 = 0x73B,
 	kFileVer1100 = 0x781,
 	kFileVer1150 = 0x782,
-	kFileVer1200 = 0x783,
-	kFileVer1201 = 0x79F
+	kFileVer1200 = 0x79F
 };
 
 enum DatumType {
@@ -373,6 +372,12 @@ enum VarType {
 	kVarInstance,
 	kVarGlobal,
 	kVarLocal
+};
+
+enum LPPFlag {
+	kLPPNone = 0,
+	kLPPSimple = 1 << 0,
+	kLPPForceD2 = 1 << 1,
 };
 
 struct CastMemberID {
@@ -413,6 +418,8 @@ typedef Common::Array<Datum> DatumArray;
 typedef Common::Array<PCell> PropertyArray;
 
 const char *scriptType2str(ScriptType scr);
+const char *castType2str(CastType type);
+const char *spriteType2str(SpriteType type);
 
 } // End of namespace Director
 

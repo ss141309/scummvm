@@ -21,7 +21,7 @@
 
 #include "common/algorithm.h"
 #include "mm/mm1/data/character.h"
-#include "mm/utils/strings.h"
+#include "mm/shared/utils/strings.h"
 #include "mm/mm1/mm1.h"
 
 namespace MM {
@@ -159,7 +159,7 @@ Character::Character() : PrimaryAttributes() {
 	Common::fill(&_flags[0], &_flags[14], 0);
 }
 
-void Character::synchronize(Common::Serializer &s) {
+void Character::synchronize(Common::Serializer &s, int portraitNum) {
 	char name[16];
 	if (s.isSaving()) {
 		// Save the name in uppercase to match original
@@ -228,6 +228,19 @@ void Character::synchronize(Common::Serializer &s) {
 	s.syncAsByte(_alignmentCtr);
 	s.syncBytes(_flags, 14);
 	s.syncAsByte(_portrait);
+	if (s.isLoading() && portraitNum != -1)
+		_portrait = portraitNum;
+
+	if (s.isLoading())
+		loadFaceSprites();
+}
+
+void Character::loadFaceSprites() {
+	if (_portrait != 0xff && g_engine->isEnhanced()) {
+		Common::String cname = Common::String::format("char%02d.fac",
+			_portrait * 2 + (_sex == MALE ? 0 : 1) + 1);
+		_faceSprites.load(cname);
+	}
 }
 
 void Character::clear() {

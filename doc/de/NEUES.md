@@ -7,7 +7,7 @@ Umfangreichere Informationen über die Änderungen des aktuellen Codes findest D
    - Die Engine "xeen" wurde für Might & Magic zu "mm" umbenannt.
 
 
-#### 2.7.0 (DD.MM.YYYY)
+#### 2.7.0 (26.02.2023)
 
  Neue Spiele:
    - Unterstützung für Soldier Boyz hinzugefügt.
@@ -192,6 +192,27 @@ Umfangreichere Informationen über die Änderungen des aktuellen Codes findest D
  3DS-Portierung:
    - Der Relocation-Parser wurde um Unterstützung für PREL31, welches von neuen Compilern verwendet wird, erweitert.
    - Weitere Optionen zur automatischen Konfiguration in ./configure hinzugefügt.
+
+ Android-Portierung:
+   - Unterstützung für das Added Storage Access Framework hinzugefügt.
+   - Verbesserte Unterstützung für Game-Controller.
+
+ iOS-Portierung:
+   - Unterstützung für Zeigegeräte hinzugefügt.
+   - Verbesserte Unterstützung des Touchpad-Modus.
+   - Unterstützung für Spiele hinzugefügt, die ein Pixel-Format von 32 Bit verwenden.
+
+ Nintendo DS-Portierung:
+   - Splash-Screen auf dem oberen Bildschirm hinzugefügt, wenn der Launcher aktiv ist.
+
+ OpenDingux-Portierung:
+   - Unterstützung für dynamische Plugins hinzugefügt.
+
+ PS Vita-Portierung:
+   - Unterstützung für dynamische Plugins hinzugefügt.
+
+ PSP-Portierung:
+   - Verbesserte Unterstützung von Spielen, die ein Pixel-Format von 32 Bit verwenden.
 
  RISC OS-Portierung:
    - Unterstützung für die 26-bit-Versionen von RISC OS hinzugefügt.

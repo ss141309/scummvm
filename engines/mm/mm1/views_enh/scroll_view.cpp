@@ -41,10 +41,23 @@ ScrollView::ScrollView(const Common::String &name,
 	_bounds.setBorderSize(FRAME_BORDER_SIZE);
 }
 
-void ScrollView::addButton(Xeen::SpriteResource *sprites,
+void ScrollView::addButton(Shared::Xeen::SpriteResource *sprites,
 		const Common::Point &pos, int frame,
 		const Common::KeyState &key) {
 	_buttons.push_back(Button(sprites, pos, frame, key));
+}
+
+void ScrollView::addButton(Shared::Xeen::SpriteResource *sprites,
+		const Common::Point &pos, int frame, KeybindingAction action) {
+	_buttons.push_back(Button(sprites, pos, frame, action));
+}
+
+void ScrollView::addButton(const Common::Rect &r, const Common::KeyState &key) {
+	_buttons.push_back(Button(r, key));
+}
+
+void ScrollView::addButton(const Common::Rect &r, KeybindingAction action) {
+	_buttons.push_back(Button(r, action));
 }
 
 void ScrollView::resetSelectedButton() {
@@ -60,10 +73,12 @@ void ScrollView::draw() {
 	Graphics::ManagedSurface s = getSurface();
 	for (uint i = 0; i < _buttons.size(); ++i) {
 		const Button &btn = _buttons[i];
-		btn._sprites->draw(&s,
-			btn._frame + (_selectedButton == (int)i ? 1 : 0),
-			Common::Point(btn._pos.x + _bounds.borderSize(),
-				btn._pos.y + _bounds.borderSize()));
+		if (btn._frame != -1) {
+			btn._sprites->draw(&s,
+				btn._frame + (_selectedButton == (int)i ? 1 : 0),
+				Common::Point(btn._bounds.left + _bounds.borderSize(),
+					btn._bounds.top + _bounds.borderSize()));
+		}
 	}
 }
 
@@ -171,7 +186,11 @@ bool ScrollView::msgMouseUp(const MouseUpMessage &msg) {
 	// If the highlighted button remains the same, trigger it's key
 	int selectedButton = getButtonAt(msg._pos);
 	if (selectedButton != -1 && selectedButton == oldSelection) {
-		msgKeypress(KeypressMessage(_buttons[selectedButton]._key));
+		const Button &btn = _buttons[selectedButton];
+		if (btn._action != KEYBIND_NONE)
+			msgAction(btn._action);
+		else
+			msgKeypress(KeypressMessage(btn._key));
 		return true;
 	}
 
@@ -179,11 +198,8 @@ bool ScrollView::msgMouseUp(const MouseUpMessage &msg) {
 }
 
 int ScrollView::getButtonAt(const Common::Point &pos) {
-	Common::Rect r(16, 16);
 	for (uint i = 0; i < _buttons.size(); ++i) {
-		r.moveTo(_innerBounds.left + _buttons[i]._pos.x,
-			_innerBounds.top + _buttons[i]._pos.y);
-		if (r.contains(pos))
+		if (_buttons[i]._bounds.contains(pos))
 			return i;
 	}
 

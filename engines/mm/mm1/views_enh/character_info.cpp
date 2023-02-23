@@ -20,7 +20,7 @@
  */
 
 #include "mm/mm1/views_enh/character_info.h"
-#include "mm/utils/strings.h"
+#include "mm/shared/utils/strings.h"
 #include "mm/mm1/globals.h"
 
 namespace MM {
@@ -62,7 +62,7 @@ const CharacterInfo::IconPos CharacterInfo::ICONS[CHAR_ICONS_COUNT] = {
 
 
 CharacterInfo::CharacterInfo() :
-		ScrollView("CharacterInfo"), _statInfo("ScrollText") {
+		PartyView("CharacterInfo"), _statInfo("ScrollText") {
 	_bounds = Common::Rect(0, 0, 320, 146);
 	_statInfo.setReduced(true);
 
@@ -82,19 +82,16 @@ CharacterInfo::CharacterInfo() :
 
 bool CharacterInfo::msgFocus(const FocusMessage &msg) {
 	_viewIcon.load("view.icn");
-	MetaEngine::setKeybindingMode(
-		KeybindingMode::KBMODE_PARTY_MENUS);
-
 	_cursorCell = 0;
 	showCursor(true);
 	delayFrames(CURSOR_BLINK_FRAMES);
 
-	return ScrollView::msgFocus(msg);
+	return PartyView::msgFocus(msg);
 }
 
 bool CharacterInfo::msgUnfocus(const UnfocusMessage &msg) {
 	_viewIcon.clear();
-	return ScrollView::msgUnfocus(msg);
+	return PartyView::msgUnfocus(msg);
 }
 
 bool CharacterInfo::msgKeypress(const KeypressMessage &msg) {
@@ -147,12 +144,8 @@ bool CharacterInfo::msgAction(const ActionMessage &msg) {
 	if (msg._action == KEYBIND_ESCAPE) {
 		close();
 		return true;
-	} else if (msg._action >= KEYBIND_VIEW_PARTY1 &&
-			msg._action <= KEYBIND_VIEW_PARTY6) {
-		g_globals->_currCharacter = &g_globals->_party[
-				msg._action - KEYBIND_VIEW_PARTY1];
-		redraw();
-		return true;
+	} else {
+		return PartyView::msgAction(msg);
 	}
 
 	return false;
@@ -183,11 +176,12 @@ void CharacterInfo::draw() {
 void CharacterInfo::drawTitle() {
 	const Character &c = *g_globals->_currCharacter;
 	Common::String msg = Common::String::format(
-		"%s : %s %s %s",
+		"%s : %s %s %s %s",
 		camelCase(c._name).c_str(),
-		capitalize(STRING[Common::String::format("stats.alignments.%d", (int)c._alignment)]).c_str(),
-		capitalize(STRING[Common::String::format("stats.races.%d", (int)c._race)]).c_str(),
-		capitalize(STRING[Common::String::format("stats.classes.%d", (int)c._class)]).c_str()
+		STRING[Common::String::format("stats.sex.%d", (int)c._sex)].c_str(),
+		STRING[Common::String::format("stats.alignments.%d", (int)c._alignment)].c_str(),
+		STRING[Common::String::format("stats.races.%d", (int)c._race)].c_str(),
+		STRING[Common::String::format("stats.classes.%d", (int)c._class)].c_str()
 	);
 
 	writeString(0, 0, msg);

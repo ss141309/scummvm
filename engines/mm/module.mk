@@ -3,11 +3,18 @@ MODULE := engines/mm
 MODULE_OBJS := \
 	metaengine.o \
 	mm.o \
-	utils/bitmap_font.o \
-	utils/engine_data.o \
-	utils/strings.o \
-	utils/strings_data.o \
-	utils/xeen_font.o \
+	shared/utils/bitmap_font.o \
+	shared/utils/engine_data.o \
+	shared/utils/strings.o \
+	shared/utils/strings_data.o \
+	shared/utils/xeen_font.o \
+	shared/xeen/cc_archive.o \
+	shared/xeen/file.o \
+	shared/xeen/sprites.o \
+	shared/xeen/xsurface.o
+
+ifdef ENABLE_MM1
+MODULE_OBJS += \
 	mm1/console.o \
 	mm1/events.o \
 	mm1/globals.o \
@@ -112,15 +119,20 @@ MODULE_OBJS := \
 	mm1/views/text_view.o \
 	mm1/views/trap.o \
 	mm1/views/unlock.o \
+	mm1/views_enh/spells/cast_spell.o \
+	mm1/views_enh/spells/spellbook.o \
 	mm1/views_enh/button_container.o \
 	mm1/views_enh/character_info.o \
+	mm1/views_enh/character_select.o \
 	mm1/views_enh/dialogs.o \
 	mm1/views_enh/game.o \
 	mm1/views_enh/game_commands.o \
 	mm1/views_enh/game_messages.o \
+	mm1/views_enh/game_party.o \
 	mm1/views_enh/main_menu.o \
 	mm1/views_enh/map.o \
 	mm1/views_enh/map_popup.o \
+	mm1/views_enh/party_view.o \
 	mm1/views_enh/quick_ref.o \
 	mm1/views_enh/scroll_popup.o \
 	mm1/views_enh/scroll_text.o \
@@ -187,7 +199,11 @@ MODULE_OBJS := \
 	mm1/maps/map51.o \
 	mm1/maps/map52.o \
 	mm1/maps/map53.o \
-	mm1/maps/map54.o \
+	mm1/maps/map54.o
+endif
+
+ifdef ENABLE_XEEN
+MODULE_OBJS += \
 	xeen/worldofxeen/clouds_cutscenes.o \
 	xeen/worldofxeen/darkside_cutscenes.o \
 	xeen/worldofxeen/worldofxeen_cutscenes.o \
@@ -245,9 +261,8 @@ MODULE_OBJS := \
 	xeen/sprites.o \
 	xeen/subtitles.o \
 	xeen/window.o \
-	xeen/xeen.o \
-	shared/xeen/cc_archive.o \
-	shared/xeen/xsurface.o
+	xeen/xeen.o
+endif
 
 # This module can be built as a plugin
 ifeq ($(ENABLE_MM), DYNAMIC_PLUGIN)

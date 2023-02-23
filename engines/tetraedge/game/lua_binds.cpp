@@ -30,6 +30,7 @@
 #include "tetraedge/to_lua.h"
 #include "tetraedge/te/te_core.h"
 #include "tetraedge/te/te_lua_thread.h"
+#include "tetraedge/te/te_particle.h"
 
 namespace Tetraedge {
 
@@ -1248,7 +1249,10 @@ static void ShowBillboard(const Common::String &name) {
 	Game *game = g_engine->getGame();
 	Billboard *bb = game->scene().billboard(name);
 	if (!bb) {
-		error("[ShowBillboard] Billboard not found %s", name.c_str());
+		// Syberia 2 uses billboard A1_RomHaut/11100/A11100-01-04.png but never
+		// loads it..
+		warning("[ShowBillboard] Billboard not found %s", name.c_str());
+		return;
 	}
 	bb->model()->setVisible(true);
 }
@@ -1654,7 +1658,7 @@ static int tolua_ExportedFunctions_ActivateAnchorZone00(lua_State *L) {
 	error("#ferror in function 'ActivateAnchorZone': %d %d %s", err.index, err.array, err.type);
 }
 
-static void SetCharacterLookChar(const Common::String &charname, const Common::String &destname, bool tall) {
+static void SetCharacterLookChar(const Common::String &charname, const Common::String &destname, bool tall, float f) {
 	Game *game = g_engine->getGame();
 	Character *character = game->scene().character(charname);
 	if (!character) {
@@ -1662,6 +1666,11 @@ static void SetCharacterLookChar(const Common::String &charname, const Common::S
 		return;
 	}
 	character->setLookingAtTallThing(tall);
+
+	if (f != 0.0)
+		warning("TODO: Use float param %f in SetCharacterLookChar", f);
+	character->setCharLookingAtFloat(f);
+
 	if (destname.empty()) {
 		character->setCharLookingAt(nullptr);
 	} else {
@@ -1677,11 +1686,13 @@ static void SetCharacterLookChar(const Common::String &charname, const Common::S
 static int tolua_ExportedFunctions_SetCharacterLookChar00(lua_State *L) {
 	tolua_Error err;
 	if (tolua_isstring(L, 1, 0, &err) && tolua_isstring(L, 2, 0, &err)
-		&& tolua_isboolean(L, 3, 1, &err) && tolua_isnoobj(L, 4, &err)) {
+		&& tolua_isboolean(L, 3, 1, &err) && tolua_isnumber(L, 4, 1, &err)
+		&& tolua_isnoobj(L, 5, &err)) {
 		Common::String s1(tolua_tostring(L, 1, nullptr));
 		Common::String s2(tolua_tostring(L, 2, nullptr));
 		bool b = tolua_toboolean(L, 3, 1);
-		SetCharacterLookChar(s1, s2, b);
+		float f = tolua_tonumber(L, 4, 0.0);
+		SetCharacterLookChar(s1, s2, b, f);
 		return 0;
 	}
 	error("#ferror in function 'SetCharacterLookChar': %d %d %s", err.index, err.array, err.type);
@@ -2138,7 +2149,7 @@ static void MoveCharacterPlayerTo(float x, float y, float z, bool walkFlag) {
 	if (dest == game->posPlayer() && character->walkModeStr() == "Walk")
 		return;
 
-	if (game->walkTimer().running() && game->walkTimer().timeElapsed() < 300000) {
+	if (game->walkTimer().running() && game->walkTimer().timeElapsed() < 300000 && game->runModeEnabled()) {
 		uint64 elapsed = game->walkTimer().timeElapsed();
 		game->walkTimer().stop();
 		if (elapsed < 300000) {
@@ -2183,9 +2194,8 @@ static int tolua_ExportedFunctions_MoveCharacterPlayerTo00(lua_State *L) {
 }
 
 static void EnableRunMode(bool val) {
-	//Game *game = g_engine->getGame();
-	//game->setRunMode(val);
-	warning("TODO: EnableRunMode %s", val ? "true" : "false");
+	Game *game = g_engine->getGame();
+	game->setRunModeEnabled(val);
 }
 
 static int tolua_ExportedFunctions_EnableRunMode00(lua_State *L) {
@@ -2364,8 +2374,178 @@ static int tolua_ExportedFunctions_AddUnlockedAnim00(lua_State *L) {
 	error("#ferror in function 'AddUnlockedAnim': %d %d %s", err.index, err.array, err.type);
 }
 
+static void SetObjectMoveDest(const Common::String &obj, float x, float y, float z) {
+	Object3D *obj3d = g_engine->getGame()->scene().object3D(obj);
+	if (obj3d) {
+		obj3d->setObjectMoveDest(TeVector3f32(x, y, z));
+	} else {
+		warning("[SetObjectMoveDest] Object not found %s", obj.c_str());
+	}
+}
 
+static int tolua_ExportedFunctions_SetObjectMoveDest00(lua_State *L) {
+	tolua_Error err;
+	if (tolua_isstring(L, 1, 0, &err) && tolua_isnumber(L, 2, 0, &err)
+		&& tolua_isnumber(L, 2, 0, &err) && tolua_isnumber(L, 4, 0, &err)
+		&& tolua_isnoobj(L, 5, &err)) {
+		Common::String s1(tolua_tostring(L, 1, nullptr));
+		float f1 = tolua_tonumber(L, 2, 0.0);
+		float f2 = tolua_tonumber(L, 3, 0.0);
+		float f3 = tolua_tonumber(L, 4, 0.0);
+		SetObjectMoveDest(s1, f1, f2, f3);
+		return 0;
+	}
+	error("#ferror in function 'SetObjectMoveDest': %d %d %s", err.index, err.array, err.type);
+}
 
+static void SetObjectMoveTime(const Common::String &obj, float f) {
+	Object3D *obj3d = g_engine->getGame()->scene().object3D(obj);
+	if (obj3d) {
+		obj3d->setObjectMoveTime(f);
+	} else {
+		warning("[SetObjectMoveTime] Object not found %s", obj.c_str());
+	}
+}
+
+static int tolua_ExportedFunctions_SetObjectMoveTime00(lua_State *L) {
+	tolua_Error err;
+	if (tolua_isstring(L, 1, 0, &err) && tolua_isnumber(L, 2, 0, &err)
+		&& tolua_isnoobj(L, 3, &err)) {
+		Common::String s1(tolua_tostring(L, 1, nullptr));
+		float f1 = tolua_tonumber(L, 2, 0.0);
+		SetObjectMoveTime(s1, f1);
+		return 0;
+	}
+	error("#ferror in function 'SetObjectMoveTime': %d %d %s", err.index, err.array, err.type);
+}
+
+static void ActivateMask(const Common::String &name, bool val) {
+	Game *game = g_engine->getGame();
+	game->scene().activateMask(name, val);
+}
+
+static int tolua_ExportedFunctions_ActivateMask00(lua_State *L) {
+	tolua_Error err;
+	if (tolua_isstring(L, 1, 0, &err) && tolua_isboolean(L, 2, 0, &err)
+		&& tolua_isnoobj(L, 3, &err)) {
+		Common::String s1(tolua_tostring(L, 1, nullptr));
+		bool b1 = tolua_toboolean(L, 2, 0.0);
+		ActivateMask(s1, b1);
+		return 0;
+	}
+	error("#ferror in function 'ActivateMask': %d %d %s", err.index, err.array, err.type);
+}
+
+static void SetYoukiFollowKate(bool val) {
+	g_engine->getGame()->scene().youkiManager().setFollowKate(val);
+}
+
+static int tolua_ExportedFunctions_SetYoukiFollowKate00(lua_State *L) {
+	tolua_Error err;
+	if (tolua_isboolean(L, 1, 0, &err) && tolua_isnoobj(L, 2, &err)) {
+		bool b1 = tolua_toboolean(L, 1, 0.0);
+		SetYoukiFollowKate(b1);
+		return 0;
+	}
+	error("#ferror in function 'SetYoukiFollowKate': %d %d %s", err.index, err.array, err.type);
+}
+
+static void AddRandomAnimation(const Common::String &character, const Common::String &anim, float f) {
+	// This exists in the game, but does nothing.
+}
+
+static int tolua_ExportedFunctions_AddRandomAnimation00(lua_State *L) {
+	tolua_Error err;
+	if (tolua_isstring(L, 1, 0, &err) && tolua_isstring(L, 2, 0, &err) &&
+		tolua_isboolean(L, 3, 0, &err) && tolua_isnoobj(L, 4, &err)) {
+		Common::String s1(tolua_tostring(L, 1, nullptr));
+		Common::String s2(tolua_tostring(L, 2, nullptr));
+		bool b1 = tolua_toboolean(L, 3, 0.0);
+		AddRandomAnimation(s1, s2, b1);
+		return 0;
+	}
+	error("#ferror in function 'AddRandomAnimation': %d %d %s", err.index, err.array, err.type);
+}
+
+static void PlayRandomAnimation(const Common::String &character) {
+	// This exists in the game, but does nothing.
+}
+
+static int tolua_ExportedFunctions_PlayRandomAnimation00(lua_State *L) {
+	tolua_Error err;
+	if (tolua_isstring(L, 1, 0, &err) && tolua_isnoobj(L, 2, &err)) {
+		Common::String s1(tolua_tostring(L, 1, nullptr));
+		PlayRandomAnimation(s1);
+		return 0;
+	}
+	error("#ferror in function 'PlayRandomAnimation': %d %d %s", err.index, err.array, err.type);
+}
+
+static int tolua_ExportedFunctions_PlaySmoke00(lua_State *L) {
+	// This exists in the game, but does nothing.
+	return 0;
+}
+
+static int tolua_ExportedFunctions_SmokeVisible00(lua_State *L) {
+	// This exists in the game, but does nothing.
+	return 0;
+}
+
+static int tolua_ExportedFunctions_PlaySnow00(lua_State *L) {
+	// This exists in the game, but does nothing.
+	return 0;
+}
+
+static int tolua_ExportedFunctions_PlaySnowCustom00(lua_State *L) {
+	// This exists in the game, but does nothing.
+	return 0;
+}
+
+static int tolua_ExportedFunctions_SnowCustomVisible00(lua_State *L) {
+	// This exists in the game, but does nothing.
+	return 0;
+}
+
+static int tolua_ExportedFunctions_RemoveRandomSound00(lua_State *L) {
+	// This exists in the game, but does nothing.
+	return 0;
+}
+
+static void PlayVerticalScrolling(float time) {
+	g_engine->getGame()->scene().playVerticalScrolling(time);
+}
+
+static int tolua_ExportedFunctions_PlayVerticalScrolling00(lua_State *L) {
+	tolua_Error err;
+	if (tolua_isnumber(L, 1, 0, &err) && tolua_isnoobj(L, 2, &err)) {
+		float f1 = tolua_tonumber(L, 1, 0.0);
+		PlayVerticalScrolling(f1);
+		return 0;
+	}
+	error("#ferror in function 'SetObjectMoveTime': %d %d %s", err.index, err.array, err.type);
+}
+
+// Not your imagination, the implementation of these two is quite different to the others.
+static int tolua_GetParticleIndex(lua_State *L) {
+	Common::String s1(tolua_tostring(L, 1, nullptr));
+	int idx = TeParticle::getIndex(s1);
+	tolua_pushnumber(L, idx);
+	return 1;
+}
+
+static int tolua_EnableParticle(lua_State *L) {
+	double d1 = tolua_tonumber(L, 1, 0.0);
+	if (d1 < 0) {
+		warning("EnableParticle: Invalid particle %d requested", (int)d1);
+		return 0;
+	}
+	TeParticle *p = (TeParticle *)TeParticle::getIndexedParticle((int)d1);
+	if (p) {
+		double d2 = tolua_tonumber(L, 2, 1.0);
+		p->setEnabled((int)d2 != 0);
+	}
+	return 0;
+}
 
 // ////////////////////////////////////////////////////////////////////////
 
@@ -2526,23 +2706,21 @@ void LuaOpenBinds(lua_State *L) {
 	tolua_function(L, "SetCharacterPlayerPosition", tolua_ExportedFunctions_SetCharacterPlayerPosition00);
 	tolua_function(L, "SetCharacterPlayerAnimation", tolua_ExportedFunctions_SetCharacterPlayerAnimation00);
 	tolua_function(L, "AddUnlockedAnim", tolua_ExportedFunctions_AddUnlockedAnim00);
-
-	// TODO Syberia 2 functions..
-	//tolua_function(L, "PlaySnow", tolua_ExportedFunctions_PlaySnow00);
-	//tolua_function(L, "PlaySnowCustom", tolua_ExportedFunctions_PlaySnowCustom00);
-	//tolua_function(L, "SnowCustomVisible", tolua_ExportedFunctions_SnowCustomVisible00);
-	//tolua_function(L, "RemoveRandomSound", tolua_ExportedFunctions_RemoveRandomSound00);
-	//tolua_function(L, "SetYoukiFollowKate", tolua_ExportedFunctions_SetYoukiFollowKate00);
-	//tolua_function(L, "PlaySmoke", tolua_ExportedFunctions_PlaySmoke00);
-	//tolua_function(L, "SmokeVisible", tolua_ExportedFunctions_SmokeVisible00);
-	//tolua_function(L, "ActivateMask", tolua_ExportedFunctions_ActivateMask00);
-	//tolua_function(L, "AddRandomAnimation", tolua_ExportedFunctions_AddRandomAnimation00);
-	//tolua_function(L, "PlayRandomAnimation", tolua_ExportedFunctions_PlayRandomAnimation00);
-	//tolua_function(L, "SetObjectMoveDest", tolua_ExportedFunctions_SetObjectMoveDest00);
-	//tolua_function(L, "SetObjectMoveTime", tolua_ExportedFunctions_SetObjectMoveTime00);
-	//tolua_function(L, "PlayVerticalScrolling", tolua_ExportedFunctions_PlayVerticalScrolling00);
-	//tolua_function(L, "GetParticleIndex", tolua_GetParticleIndex);
-	//tolua_function(L, "EnableParticle", tolua_EnableParticle);
+	tolua_function(L, "SetObjectMoveDest", tolua_ExportedFunctions_SetObjectMoveDest00);
+	tolua_function(L, "SetObjectMoveTime", tolua_ExportedFunctions_SetObjectMoveTime00);
+	tolua_function(L, "ActivateMask", tolua_ExportedFunctions_ActivateMask00);
+	tolua_function(L, "SetYoukiFollowKate", tolua_ExportedFunctions_SetYoukiFollowKate00);
+	tolua_function(L, "AddRandomAnimation", tolua_ExportedFunctions_AddRandomAnimation00);
+	tolua_function(L, "PlayRandomAnimation", tolua_ExportedFunctions_PlayRandomAnimation00);
+	tolua_function(L, "PlaySmoke", tolua_ExportedFunctions_PlaySmoke00);
+	tolua_function(L, "SmokeVisible", tolua_ExportedFunctions_SmokeVisible00);
+	tolua_function(L, "PlaySnow", tolua_ExportedFunctions_PlaySnow00);
+	tolua_function(L, "PlaySnowCustom", tolua_ExportedFunctions_PlaySnowCustom00);
+	tolua_function(L, "SnowCustomVisible", tolua_ExportedFunctions_SnowCustomVisible00);
+	tolua_function(L, "RemoveRandomSound", tolua_ExportedFunctions_RemoveRandomSound00);
+	tolua_function(L, "PlayVerticalScrolling", tolua_ExportedFunctions_PlayVerticalScrolling00);
+	tolua_function(L, "GetParticleIndex", tolua_GetParticleIndex);
+	tolua_function(L, "EnableParticle", tolua_EnableParticle);
 
 	tolua_endmodule(L);
 }

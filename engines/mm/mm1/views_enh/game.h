@@ -27,6 +27,7 @@
 #include "mm/mm1/views/game_view.h"
 #include "mm/mm1/views_enh/game_commands.h"
 #include "mm/mm1/views_enh/game_messages.h"
+#include "mm/mm1/views_enh/game_party.h"
 
 namespace MM {
 namespace MM1 {
@@ -38,6 +39,7 @@ private:
 	Views::GameView _view;
 	GameCommands _commands;
 	GameMessages _messages;
+	GameParty _party;
 public:
 	Game();
 	virtual ~Game() {}

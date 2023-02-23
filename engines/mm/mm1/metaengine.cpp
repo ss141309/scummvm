@@ -69,6 +69,7 @@ static const KeybindingRecord COMBAT_KEYS[] = {
 };
 
 static const KeybindingRecord NORMAL_KEYS[] = {
+	{ KEYBIND_SELECT, "SELECT", "Select", "RETURN", nullptr },
 	{ KEYBIND_FORWARDS, "FORWARDS", "Forwards", "UP", nullptr },
 	{ KEYBIND_BACKWARDS, "BACKWARDS", "Backwards", "DOWN", nullptr },
 	{ KEYBIND_TURN_LEFT, "TURN_LEFT", "Turn Left", "LEFT", nullptr },
@@ -76,6 +77,7 @@ static const KeybindingRecord NORMAL_KEYS[] = {
 	{ KEYBIND_STRAFE_LEFT, "STRAFE_LEFT", "Strafe Left", "C+LEFT", nullptr },
 	{ KEYBIND_STRAFE_RIGHT, "STRAFE_RIGHT", "Strafe Right", "C+RIGHT", nullptr },
 
+	{ KEYBIND_SPELL, "CAST", "Cast Spell", "c", nullptr },
 	{ KEYBIND_MAP, "MAP", "Show Map", "m", nullptr },
 	{ KEYBIND_MINIMAP, "MINIMAP", "Toggle Minimap", "=", nullptr },
 	{ KEYBIND_ORDER, "ORDER", "Reorder Party", "o", nullptr },
@@ -150,6 +152,8 @@ Common::KeymapArray MetaEngine::initKeymaps(KeybindingMode mode) {
 			act->addDefaultInputMapping(r->_key);
 			if (r->_joy)
 				act->addDefaultInputMapping(r->_joy);
+			if (r->_action == KEYBIND_SELECT)
+				act->addDefaultInputMapping("SPACE");
 
 			if (r->_action == KEYBIND_FORWARDS || r->_action == KEYBIND_BACKWARDS ||
 					r->_action == KEYBIND_TURN_LEFT || r->_action == KEYBIND_TURN_RIGHT ||

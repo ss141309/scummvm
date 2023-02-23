@@ -41,12 +41,13 @@ bool InGameSceneXmlParser::parserCallback_gridSize(ParserNode *node) {
 }
 
 bool InGameSceneXmlParser::parserCallback_curve(ParserNode *node) {
-	warning("TODO: handle curve tag in InGameSceneXmlParser");
+	_scene->loadCurve(node->values["name"]);
 	return true;
 }
 
 bool InGameSceneXmlParser::parserCallback_dummy(ParserNode *node) {
-	warning("TODO: handle dummy tag in InGameSceneXmlParser");
+	_scene->_dummies.push_back(InGameScene::Dummy());
+	_scene->_dummies.back()._name = node->values["name"];
 	return true;
 }
 
@@ -87,6 +88,7 @@ bool InGameSceneXmlParser::parserCallback_shadowMask(ParserNode *node) {
 }
 
 bool InGameSceneXmlParser::parserCallback_shadowReceivingObject(ParserNode *node) {
+	_scene->loadShadowReceivingObject(node->values["name"], _scene->getZoneName(), _scene->getSceneName());
 	return true;
 }
 
@@ -120,6 +122,36 @@ bool InGameSceneXmlParser::parserCallback_noCollisionSlide(ParserNode *node) {
 	return true;
 }
 
+bool InGameSceneXmlParser::parserCallback_flamme(ParserNode *node) {
+	_scene->_flammes.push_back(InGameScene::Flamme());
+	return true;
+}
+
+bool InGameSceneXmlParser::parserCallback_name(ParserNode *node) {
+	_scene->_flammes.back()._name = node->values["value"];
+	return true;
+}
+
+bool InGameSceneXmlParser::parserCallback_center(ParserNode *node) {
+	_scene->_flammes.back()._center = parsePoint(node);
+	return true;
+}
+
+bool InGameSceneXmlParser::parserCallback_yMax(ParserNode *node) {
+	_scene->_flammes.back()._yMax = parsePoint(node);
+	return true;
+}
+
+bool InGameSceneXmlParser::parserCallback_offsetMin(ParserNode *node) {
+	_scene->_flammes.back()._offsetMin = parsePoint(node);
+	return true;
+}
+
+bool InGameSceneXmlParser::parserCallback_offsetMax(ParserNode *node) {
+	_scene->_flammes.back()._offsetMax = parsePoint(node);
+	return true;
+}
+
 bool InGameSceneXmlParser::closedKeyCallback(ParserNode *node) {
 	_textNodeType = TextNodeNone;
 	if (node->name == "pathZone") {
@@ -146,6 +178,7 @@ bool InGameSceneXmlParser::textCallback(const Common::String &val) {
 			return false;
 		}
 		_fmzGridSize = sz;
+		break;
 	}
 	default:
 		parserError("Unexpected text block");

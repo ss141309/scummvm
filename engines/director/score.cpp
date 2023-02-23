@@ -450,29 +450,41 @@ void Score::update() {
 
 	if (tempo) {
 		const bool waitForClickOnly = _vm->getVersion() < 300;
-		const int maxDelay = _vm->getVersion() < 400 ? 120 : 60;
+		int maxDelay = 60;
+		if (_vm->getVersion() < 300) {
+			maxDelay = 120;
+		} else if (_vm->getVersion() < 400) {
+			// Director 3 has a slider that goes up to 120, but any value
+			// beyond 95 gets converted into a video wait instruction.
+			maxDelay = 95;
+		}
 		if (tempo >= 256 - maxDelay) {
 			// Delay
 			_nextFrameTime = g_system->getMillis() + (256 - tempo) * 1000;
+			debugC(5, kDebugLoading, "Score::update(): setting _nextFrameTime to %d based on a delay of %d", _nextFrameTime, 256 - tempo);
 		} else if (tempo <= 120) {
 			// FPS
 			_currentFrameRate = tempo;
 			_nextFrameTime = g_system->getMillis() + 1000.0 / (float)_currentFrameRate;
+			debugC(5, kDebugLoading, "Score::update(): setting _nextFrameTime to %d based on a framerate of %d", _nextFrameTime, tempo);
 		} else {
 			if (tempo == 128) {
 				_waitForClick = true;
 				_waitForClickCursor = false;
 				renderCursor(_movie->getWindow()->getMousePos());
+				debugC(5, kDebugLoading, "Score::update(): waiting for mouse click before next frame");
 			} else if (!waitForClickOnly && tempo == 135) {
 				// Wait for sound channel 1
 				_waitForChannel = 1;
+				debugC(5, kDebugLoading, "Score::update(): waiting for sound channel 1 before next frame");
 			} else if (!waitForClickOnly && tempo == 134) {
 				// Wait for sound channel 2
 				_waitForChannel = 2;
-
+				debugC(5, kDebugLoading, "Score::update(): waiting for sound channel 2 before next frame");
 			} else if (!waitForClickOnly && tempo >= 136 && tempo <= 135 + _numChannelsDisplayed) {
 				// Wait for a digital video in a channel to finish playing
 				_waitForVideoChannel = tempo - 135;
+				debugC(5, kDebugLoading, "Score::update(): waiting for video in channel %d before next frame", _waitForVideoChannel);
 			} else {
 				warning("Unhandled tempo instruction: %d", tempo);
 			}
@@ -1295,7 +1307,9 @@ void Score::setSpriteCasts() {
 		for (uint16 j = 0; j < _frames[i]->_sprites.size(); j++) {
 			_frames[i]->_sprites[j]->setCast(_frames[i]->_sprites[j]->_castId);
 
-			debugC(1, kDebugImages, "Score::setSpriteCasts(): Frame: %d Channel: %d castId: %s type: %d", i, j, _frames[i]->_sprites[j]->_castId.asString().c_str(), _frames[i]->_sprites[j]->_spriteType);
+			debugC(1, kDebugImages, "Score::setSpriteCasts(): Frame: %d Channel: %d castId: %s type: %d (%s)",
+				i, j, _frames[i]->_sprites[j]->_castId.asString().c_str(), _frames[i]->_sprites[j]->_spriteType,
+				spriteType2str(_frames[i]->_sprites[j]->_spriteType));
 		}
 	}
 }
@@ -1466,11 +1480,13 @@ Common::String Score::formatChannelInfo() {
 		Channel &channel = *_channels[i + 1];
 		Sprite &sprite = *channel._sprite;
 		if (sprite._castId.member) {
-			result += Common::String::format("CH: %-3d castId: %s, visible: %d, [inkData: 0x%02x [ink: %d, trails: %d, line: %d], %dx%d@%d,%d type: %d fg: %d bg: %d], script: %s, flags2: 0x%x, unk2: 0x%x, unk3: 0x%x, constraint: %d, puppet: %d, stretch: %d\n",
+			result += Common::String::format("CH: %-3d castId: %s, visible: %d, [inkData: 0x%02x [ink: %d, trails: %d, line: %d], %dx%d@%d,%d type: %d (%s) fg: %d bg: %d], script: %s, flags2: 0x%x, unk2: 0x%x, unk3: 0x%x, constraint: %d, puppet: %d, stretch: %d\n",
 				i + 1, sprite._castId.asString().c_str(), channel._visible, sprite._inkData,
 				sprite._ink, sprite._trails, sprite._thickness, channel._width, channel._height,
 				channel._currentPoint.x, channel._currentPoint.y,
-				sprite._spriteType, sprite._foreColor, sprite._backColor, sprite._scriptId.asString().c_str(), sprite._colorcode, sprite._blendAmount, sprite._unk3, channel._constraint, sprite._puppet, sprite._stretch);
+				sprite._spriteType, spriteType2str(sprite._spriteType), sprite._foreColor, sprite._backColor,
+				sprite._scriptId.asString().c_str(), sprite._colorcode, sprite._blendAmount, sprite._unk3,
+				channel._constraint, sprite._puppet, sprite._stretch);
 		} else {
 			result += Common::String::format("CH: %-3d castId: 000\n", i + 1);
 		}

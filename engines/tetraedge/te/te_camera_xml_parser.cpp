@@ -24,10 +24,7 @@
 namespace Tetraedge {
 
 bool TeCameraXmlParser::parserCallback_position(ParserNode *node) {
-	float x = atof(node->values["x"].c_str());
-	float y = atof(node->values["y"].c_str());
-	float z = atof(node->values["z"].c_str());
-	_cam->setPosition(TeVector3f32(x, y, z));
+	_cam->setPosition(parsePoint(node));
 	return true;
 }
 
@@ -42,30 +39,27 @@ bool TeCameraXmlParser::parserCallback_rotation(ParserNode *node) {
 }
 
 bool TeCameraXmlParser::parserCallback_scale(ParserNode *node) {
-	float x = atof(node->values["x"].c_str());
-	float y = atof(node->values["y"].c_str());
-	float z = atof(node->values["z"].c_str());
-	_cam->setScale(TeVector3f32(x, y, z));
+	_cam->setScale(parsePoint(node));
 	return true;
 }
 
 bool TeCameraXmlParser::parserCallback_fov(ParserNode *node) {
-	_cam->setFov(atof(node->values["value"].c_str()));
+	_cam->setFov(parseDouble(node));
 	return true;
 }
 
 bool TeCameraXmlParser::parserCallback_aspect(ParserNode *node) {
-	_cam->setAspectRatio(atof(node->values["value"].c_str()));
+	_cam->setAspectRatio(parseDouble(node));
 	return true;
 }
 
 bool TeCameraXmlParser::parserCallback_near(ParserNode *node) {
-	_cam->setOrthoNear(atof(node->values["value"].c_str()));
+	_cam->setOrthoNear(parseDouble(node));
 	return true;
 }
 
 bool TeCameraXmlParser::parserCallback_far(ParserNode *node) {
-	_cam->setOrthoFar(atof(node->values["value"].c_str()));
+	_cam->setOrthoFar(parseDouble(node));
 	return true;
 }
 

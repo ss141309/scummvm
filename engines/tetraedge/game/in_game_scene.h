@@ -28,6 +28,7 @@
 
 #include "tetraedge/game/object3d.h"
 #include "tetraedge/game/billboard.h"
+#include "tetraedge/game/youki_manager.h"
 
 #include "tetraedge/te/te_act_zone.h"
 #include "tetraedge/te/te_bezier_curve.h"
@@ -35,6 +36,7 @@
 #include "tetraedge/te/te_scene.h"
 #include "tetraedge/te/te_light.h"
 #include "tetraedge/te/te_lua_gui.h"
+#include "tetraedge/te/te_particle.h"
 #include "tetraedge/te/te_pick_mesh2.h"
 
 namespace Tetraedge {
@@ -90,6 +92,50 @@ public:
 		TeVector3f32 _scale;
 	};
 
+	static const int MAX_FIRE;
+	static const int MAX_SNOW;
+	static const int MAX_SMOKE;
+	static const float DUREE_MAX_FIRE;
+	static const float SCALE_FIRE;
+	static const int MAX_FLAKE;
+	static const float DUREE_MIN_FLAKE;
+	static const float DUREE_MAX_FLAKE;
+	static const float SCALE_FLAKE;
+	static const float DEPTH_MAX_FLAKE;
+
+	struct Fire {
+		TeCurveAnim2<TeModel, TeVector3f32> _positionAnim;
+		TeCurveAnim2<TeModel, TeColor> _colorAnim;
+		TeCurveAnim2<TeModel, TeVector3f32> _scaleAnim;
+	};
+
+	struct Flamme {
+		Flamme() : _needsFires(false), _addFireOnUpdate(false) {};
+		~Flamme();
+		Common::Array<Fire*> _fires;
+		Common::String _name;
+		TeVector3f32 _center;
+		TeVector3f32 _yMax;
+		TeVector3f32 _offsetMin;
+		TeVector3f32 _offsetMax;
+		bool _needsFires;
+		bool _addFireOnUpdate;
+		void initFire();
+	};
+
+	// TODO: Any other members of RippleMask?
+	class RippleMask : public TeModel {
+
+	};
+
+	struct SceneLight {
+		Common::String _name;
+		TeVector3f32 _v1;
+		TeVector3f32 _v2;
+		TeColor _color;
+		float _f;
+	};
+
 	void activateAnchorZone(const Common::String &name, bool val);
 	void addAnchorZone(const Common::String &s1, const Common::String &name, float radius);
 	void addBlockingObject(const Common::String &obj) {
@@ -116,6 +162,9 @@ public:
 	void deserializeCam(Common::ReadStream &stream, TeIntrusivePtr<TeCamera> &cam);
 	void deserializeModel(Common::ReadStream &stream, TeIntrusivePtr<TeModel> &model, TePickMesh2 *pickmesh);
 	virtual void draw() override;
+	void drawKate();
+	void drawMask();
+	void drawReflection();
 	void drawPath();
 	Dummy dummy(const Common::String &name);
 	bool findKate();
@@ -152,6 +201,7 @@ public:
 	// Syberia 2 specific data..
 	void loadActZones();
 	bool loadCamera(const Common::String &name);
+	bool loadCurve(const Common::String &name);
 	bool loadDynamicLightBloc(const Common::String &name, const Common::String &texture, const Common::String &zone, const Common::String &scene);
 	// loadFlamme uses the xml doc
 	bool loadFreeMoveZone(const Common::String &name, TeVector2f32 &gridSize);
@@ -173,6 +223,7 @@ public:
 	Object3D *object3D(const Common::String &oname);
 	void onMainWindowSizeChanged();
 	TeFreeMoveZone *pathZone(const Common::String &zname);
+	void playVerticalScrolling(float time);
 	TeVector3f32 positionMarker(const Common::String &mname);
 	void removeBlockingObject(const Common::String &oname);
 
@@ -191,8 +242,8 @@ public:
 	void update() override;
 
 	// Does nothing, but to keep calls from original..
-	static void updateScroll() {};
-	static void updateViewport() {};
+	void updateScroll();
+	void updateViewport(int ival);
 
 	Character *_character;
 	Common::Array<Character *> _characters;
@@ -219,12 +270,15 @@ public:
 	void setWaitTime(float usecs) { _waitTime = usecs; }
 	TeTimer &waitTimeTimer() { return _waitTimeTimer; }
 	Common::Array<Common::SharedPtr<TeLight>> &lights() { return _lights; }
+	Common::Array<TeIntrusivePtr<TeParticle>> &particles() { return _particles; }
 
 	// Note: Zone name and scene name are only set in Syberia 2
 	const Common::String getZoneName() const { return _zoneName; }
 	const Common::String getSceneName() const { return _sceneName; }
 
 	void setCollisionSlide(bool val) { _collisionSlide = val; }
+	void activateMask(const Common::String &name, bool val);
+	YoukiManager &youkiManager() { return _youkiManager; }
 
 private:
 	int _shadowLightNo;
@@ -248,6 +302,7 @@ private:
 	Common::Array<Billboard *> _billboards;
 	Common::Array<TeSpriteLayout *> _sprites;
 	Common::Array<TePickMesh2 *> _clickMeshes;
+	Common::Array<RippleMask *> _rippleMasks;
 
 	Common::HashMap<Common::String, SoundStep> _soundSteps;
 	Common::HashMap<Common::String, Common::Array<Callback*>> _callbacks;
@@ -256,8 +311,12 @@ private:
 	Common::Array<Object> _objects;
 	Common::Array<TeIntrusivePtr<TeBezierCurve>> _bezierCurves;
 	Common::Array<Dummy> _dummies;
+	Common::Array<Flamme> _flammes;
+	Common::Array<SceneLight> _sceneLights;
 	Common::Array<TeIntrusivePtr<TeModel>> _zoneModels;
 	Common::Array<TeIntrusivePtr<TeModel>> _masks;
+	Common::Array<TeIntrusivePtr<TeParticle>> _particles;
+	Common::Array<TeIntrusivePtr<TeModel>> _shadowReceivingObjects;
 
 	TeIntrusivePtr<TeModel> _playerCharacterModel;
 	TeIntrusivePtr<TeBezierCurve> _curve;
@@ -268,7 +327,8 @@ private:
 
 	Common::Array<Common::SharedPtr<TeLight>> _lights;
 
-	TeVector2f32 _someScrollVector;
+	TeVector2f32 _scrollOffset;
+	TeVector2f32 _scrollScale;
 	TeVector2f32 _viewportSize;
 
 	Common::Path _loadedPath;
@@ -278,7 +338,10 @@ private:
 	Common::String _sceneName;
 	Common::String _zoneName;
 	bool _maskAlpha;
-
+	YoukiManager _youkiManager;
+	TeTimer _verticalScrollTimer;
+	float _verticalScrollTime;
+	bool _verticalScrollPlaying;
 };
 
 } // end namespace Tetraedge

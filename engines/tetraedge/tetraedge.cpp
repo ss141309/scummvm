@@ -40,6 +40,7 @@
 #include "tetraedge/te/te_lua_thread.h"
 #include "tetraedge/te/te_sound_manager.h"
 #include "tetraedge/te/te_input_mgr.h"
+#include "tetraedge/te/te_particle.h"
 
 namespace Tetraedge {
 
@@ -48,7 +49,7 @@ TetraedgeEngine *g_engine;
 TetraedgeEngine::TetraedgeEngine(OSystem *syst, const ADGameDescription *gameDesc) : Engine(syst),
 	_gameDescription(gameDesc), _randomSource("Tetraedge"), _resourceManager(nullptr),
 	_core(nullptr),	_application(nullptr), _game(nullptr), _renderer(nullptr),
-	_soundManager(nullptr), _inputMgr(nullptr) {
+	_soundManager(nullptr), _inputMgr(nullptr), _gameType(kNone) {
 	g_engine = this;
 }
 
@@ -67,6 +68,7 @@ TetraedgeEngine::~TetraedgeEngine() {
 	TeLuaThread::cleanup();
 	TeTimer::cleanup();
 	TeObject::cleanup();
+	TeParticle::cleanup();
 }
 
 /*static*/
@@ -194,6 +196,15 @@ bool TetraedgeEngine::onKeyUp(const Common::KeyState &state) {
 }
 
 Common::Error TetraedgeEngine::run() {
+	if (getGameId() == "syberia")
+		_gameType = kSyberia;
+	else if (getGameId() == "syberia2")
+		_gameType = kSyberia2;
+	else if (getGameId() == "amerzone")
+		_gameType = kAmerzone;
+	else
+		error("Unknown game id %s", getGameId().c_str());
+
 	configureSearchPaths();
 	// from BasicOpenGLView::prepareOpenGL..
 	_application = new Application();

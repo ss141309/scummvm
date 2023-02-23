@@ -25,6 +25,7 @@
 #include "common/array.h"
 #include "common/serializer.h"
 #include "mm/mm1/data/items.h"
+#include "mm/shared/xeen/sprites.h"
 
 namespace MM {
 namespace MM1 {
@@ -57,11 +58,20 @@ enum Condition {
 };
 
 enum ConditionEnum {
-	C_GOOD, C_ERADICATED, C_DEAD, C_STONE, C_UNCONSCIOUS,
-	C_PARALYZED, C_POISONED, C_DISEASED, C_SILENCED,
-	C_BLINDED, C_ASLEEP
+	HEART_BROKEN = 1,
+	C_BLINDED = 2,			// WEAK condition in Xeen
+	C_POISONED = 3,
+	C_DISEASED = 4,
+	C_ASLEEP = 8,
+	DEPRESSED = 9,
+	C_SILENCED = 10,		// CONFUSED condition in Xeen
+	C_PARALYZED = 11,
+	C_UNCONSCIOUS = 12,
+	C_DEAD = 13,
+	C_STONE = 14,
+	C_ERADICATED = 15,
+	C_GOOD = 16
 };
-
 
 enum Resistance {
 	RESISTANCE_MAGIC = 0, RESISTANCE_FIRE = 1, RESISTANCE_COLD = 2,
@@ -447,20 +457,26 @@ struct Character : public PrimaryAttributes {
 	byte _worthiness = 0;
 	byte _alignmentCtr = 0;
 	byte _flags[14];
+
 	byte _portrait = 0;
+	Shared::Xeen::SpriteResource _faceSprites;
 
 	// Non persistent fields
 	byte _numDrinks = 0;
 	// Combat fields
 	bool _checked = false;
 	bool _canAttack = false;
+	int _nonCombatSpell = -1;
+	int _combatSpell = -1;
 
 	Character();
 
 	/**
 	 * Handles save/loading a character
+	 * @param portraitNum		Override for portrait to use for
+	 * a character being loaded from the game defaults
 	 */
-	void synchronize(Common::Serializer &s);
+	void synchronize(Common::Serializer &s, int portraitNum = -1);
 
 	/**
 	 * Equality test
@@ -539,6 +555,11 @@ struct Character : public PrimaryAttributes {
 	 * value for the party at the end of the game
 	 */
 	size_t getPerformanceTotal() const;
+
+	/**
+	 * Loads the face sprites for the character
+	 */
+	void loadFaceSprites();
 
 	/**
 	 * Returns the color to use in enhanced mode to

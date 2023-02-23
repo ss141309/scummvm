@@ -996,8 +996,6 @@ Common::SeekableReadStreamEndian *readZlibData(Common::SeekableReadStream &strea
 }
 
 uint16 humanVersion(uint16 ver) {
-	if (ver >= kFileVer1201)
-		return 1201;
 	if (ver >= kFileVer1200)
 		return 1200;
 	if (ver >= kFileVer1150)
@@ -1034,7 +1032,7 @@ Common::Platform platformFromID(uint16 id) {
 	case 2:
 		return Common::kPlatformWindows;
 	default:
-		warning("platformFromID: Unknown platform ID %d", id);
+		warning("BUILDBOT: platformFromID: Unknown platform ID %d", id);
 		break;
 	}
 	return Common::kPlatformUnknown;
@@ -1086,49 +1084,6 @@ Common::String encodePathForDump(const Common::String &path) {
 
 Common::String utf8ToPrintable(const Common::String &str) {
 	return Common::toPrintable(Common::U32String(str));
-}
-
-Common::String castTypeToString(const CastType &type) {
-	Common::String res;
-	switch (type) {
-	case kCastBitmap:
-		res = "bitmap";
-		break;
-	case kCastPalette:
-		res = "palette";
-		break;
-	case kCastButton:
-		res = "button";
-		break;
-	case kCastPicture:
-		res = "picture";
-		break;
-	case kCastDigitalVideo:
-		res = "digitalVideo";
-		break;
-	case kCastLingoScript:
-		res = "script";
-		break;
-	case kCastShape:
-		res = "shape";
-		break;
-	case kCastFilmLoop:
-		res = "filmLoop";
-		break;
-	case kCastSound:
-		res = "sound";
-		break;
-	case kCastMovie:
-		res = "movie";
-		break;
-	case kCastText:
-		res = "text";
-		break;
-	default:
-		res = "empty";
-		break;
-	}
-	return res;
 }
 
 Common::String decodePlatformEncoding(Common::String input) {

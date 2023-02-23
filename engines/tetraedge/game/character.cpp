@@ -70,7 +70,7 @@ _recallageY(true), _walkToFlag(false), _walkCurveEnd(0.0f), _walkCurveLast(0.0f)
 _walkCurveLen(0.0f), _walkCurveIncrement(0.0f), _walkEndAnimG(false), _walkTotalFrames(0),
 _walkCurveNextLength(0.0f), _walkedLength(0.0f), _walkLoopAnimLen(0.0f), _walkEndGAnimLen(0.0f),
 _walkStartAnimLen(0.0f), _walkStartAnimFrameCount(0), _walkLoopAnimFrameCount(0),
-_walkEndGAnimFrameCount(0), _hasAnchor(false) {
+_walkEndGAnimFrameCount(0), _hasAnchor(false), _charLookingAtFloat(0.0f) {
 	_curModelAnim.setDeleteFn(&TeModelAnimation::deleteLaterStatic);
 }
 
@@ -210,7 +210,7 @@ float Character::animLengthFromFile(const Common::String &animname, uint32 *pfra
 	}
 
 	// The "Pere" or "father" bone is the root.
-	float animLen = animLength(*anim, anim->findBone("Pere"), lastframe);
+	float animLen = animLength(*anim, anim->findBone(rootBone()), lastframe);
 	int frameCount = anim->lastFrame() + 1 - anim->firstFrame();
 	*pframeCount = frameCount;
 
@@ -371,14 +371,17 @@ bool Character::loadModel(const Common::String &mname, bool unused) {
 
 	_model->setName(mname);
 	_model->setScale(_characterSettings._defaultScale);
+	if (_characterSettings._invertNormals)
+		_model->invertNormals();
 
 	for (auto &mesh : _model->meshes())
 		mesh->setVisible(true);
 
-	// Set all mouthes not visible by default
+	// Set all mouthes, eyes, etc not visible by default
 	_model->setVisibleByName("_B_", false);
-	// Set all eyes not visible by default
 	_model->setVisibleByName("_Y_", false);
+	_model->setVisibleByName("_M_", false);
+	_model->setVisibleByName("_E_", false);
 
 	// Note: game loops through "faces" here, but it only ever uses the default ones.
 	_model->setVisibleByName(_characterSettings._defaultEyes, true);
@@ -462,7 +465,7 @@ bool Character::onBonesUpdate(const Common::String &boneName, TeMatrix4x4 &boneM
 		return false;
 
 	Game *game = g_engine->getGame();
-	if (boneName == "Pere") {
+	if (boneName == rootBone()) {
 		const Common::String animfile = _model->anim()->loadedPath().getLastComponent().toString();
 		bool resetX = false;
 		if (game->scene()._character == this) {
@@ -507,8 +510,7 @@ bool Character::onBonesUpdate(const Common::String &boneName, TeMatrix4x4 &boneM
 			float newY = (fabs(minY) > fabs(lastHeadY)) ? 0.0 : minY + lastHeadY;
 			_lastHeadRotation.setY(newY);
 
-			_headRotation.setX(_lastHeadRotation.getX());
-			_headRotation.setY(_lastHeadRotation.getY());
+			_headRotation = _lastHeadRotation;
 
 			TeQuaternion rot1 = TeQuaternion::fromAxisAndAngle(TeVector3f32(-1, 0, 0), _lastHeadRotation.getX());
 			TeQuaternion rot2 = TeQuaternion::fromAxisAndAngle(TeVector3f32(0, 0, 1), _lastHeadRotation.getY());
@@ -594,7 +596,7 @@ bool Character::onModelAnimationFinished() {
 	}
 
 	if (!isWalkAnim && shouldAdjust) {
-		int pereBone = _curModelAnim->findBone("Pere");
+		int pereBone = _curModelAnim->findBone(rootBone());
 		const TeTRS endTRS = trsFromAnim(*_curModelAnim, pereBone, _curModelAnim->lastFrame());
 		TeVector3f32 trans = endTRS.getTranslation();
 		trans.x() = -trans.x();
@@ -698,6 +700,13 @@ void Character::removeFromCurve() {
 	_curve.release();
 }
 
+Common::String Character::rootBone() const {
+	if (g_engine->gameType() != TetraedgeEngine::kSyberia2 || _model->name() != "Youki")
+		return "Pere";
+	else
+		return "Bip01";
+}
+
 bool Character::setAnimation(const Common::String &aname, bool repeat, bool returnToIdle, bool unused, int startFrame, int endFrame) {
 	if (aname.empty())
 		return false;
@@ -771,7 +780,7 @@ float Character::speedFromAnim(double msFromStart) {
 	if (!modelAnim)
 		return 0.0f;
 
-	const int pereBone = modelAnim->findBone("Pere");
+	const int pereBone = modelAnim->findBone(rootBone());
 	int curFrame = modelAnim->calcCurrentFrame(msFromStart);
 
 	float result;
@@ -1046,6 +1055,46 @@ void Character::walkTo(float curveEnd, bool walkFlag) {
 		_walkCurveIncrement = _walkCurveLen / animLen;
 	}
 	play();
+}
+
+Character::Water::Water() {
+	_model = new TeModel();
+	_model->setName("Water");
+	TeIntrusivePtr<TeCamera> cam = g_engine->getGame()->scene().currentCamera();
+	if (!cam)
+		error("No active camera when constructing water");
+	TeMatrix4x4 camMatrix = cam->worldTransformationMatrix();
+	Common::Array<TeVector3f32> quad;
+	quad.resize(4);
+	quad[0] = camMatrix.mult3x3(TeVector3f32(-0.1f, 0.0f,  0.1f));
+	quad[1] = camMatrix.mult3x3(TeVector3f32( 0.1f, 0.0f,  0.1f));
+	quad[2] = camMatrix.mult3x3(TeVector3f32(-0.1f, 0.0f, -0.1f));
+	quad[3] = camMatrix.mult3x3(TeVector3f32( 0.1f, 0.0f, -0.1f));
+	TeQuaternion rot = TeQuaternion::fromEuler(TeVector3f32(0, 0, 0));
+	TeIntrusivePtr<Te3DTexture> tex = Te3DTexture::makeInstance();
+	tex->load(g_engine->getCore()->findFile("texturesIngame/EauOndine1.tga"));
+	_model->setQuad(tex, quad, TeColor(255, 0, 0, 0));
+	_model->setRotation(rot);
+	_model->setScale(TeVector3f32(0.5, 0.5, 0.5));
+	_colorAnim._duration = 2000.0f;
+	TeColor col = _model->color();
+	col.a() = 100;
+	_colorAnim._startVal = col;
+	col.a() = 0;
+	_colorAnim._endVal = col;
+	Common::Array<float> curve;
+	curve.push_back(0);
+	curve.push_back(1);
+	_colorAnim.setCurve(curve);
+	_colorAnim._callbackObj = _model.get();
+	_colorAnim._callbackMethod = &TeModel::setColor;
+	_colorAnim.play();
+	_scaleAnim._duration = 2000.0f;
+	_scaleAnim._startVal = _model->scale();
+	_scaleAnim._endVal = TeVector3f32(3.0f, 3.0f, 3.0f);
+	_scaleAnim.setCurve(curve);
+	_scaleAnim._callbackObj = _model.get();
+	_scaleAnim._callbackMethod = &TeModel::setScale;
 }
 
 } // end namespace Tetraedge

@@ -137,6 +137,21 @@ TeTRS TeModel::getBone(TeIntrusivePtr<TeModelAnimation> anim, uint num) {
 	return _bones[num]._trs;
 }
 
+void TeModel::invertNormals() {
+	for (auto mesh : meshes()) {
+		for (uint i = 0; i < mesh->numIndexes() / 3; i++) {
+			// Swap order of verticies in each triangle.
+			uint idx0 = mesh->index(i);
+			uint idx2 = mesh->index(i + 2);
+			mesh->setIndex(i, idx2);
+			mesh->setIndex(i + 2, idx0);
+		}
+		for (uint i = 0; i < mesh->numVerticies(); i++) {
+			mesh->setNormal(i, -mesh->normal(i));
+		}
+	}
+}
+
 TeMatrix4x4 TeModel::lerpElementsMatrix(uint weightsNum, const Common::Array<TeMatrix4x4> &matricies) {
 	TeMatrix4x4 retval;
 	// Start with a 0 matrix.

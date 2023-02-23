@@ -48,7 +48,7 @@ bool Application::_dontUpdateWhenApplicationPaused = false;
 
 Application::Application() : _finishedGame(false), _finishedFremium(false),
 _captureFade(false), _difficulty(1), _created(false), _tutoActivated(false),
-_drawShadows(true) {
+_drawShadows(true), _ratioStretched(false) {
 	TeCore *core = g_engine->getCore();
 	core->_coreNotReady = true;
 	core->fileFlagSystemSetFlag("platform", "MacOSX");
@@ -84,6 +84,7 @@ void Application::create() {
 
 	const int winWidth = g_engine->getDefaultScreenWidth();
 	const int winHeight = g_engine->getDefaultScreenHeight();
+
 	// See TeMainWindowBase::initCamera
 	_mainWindowCamera.reset(new TeCamera());
 	_mainWindowCamera->setName("_mainWinCam");
@@ -96,6 +97,7 @@ void Application::create() {
 	_mainWindow.setSizeType(TeILayout::ABSOLUTE);
 	_mainWindow.setPositionType(TeILayout::ABSOLUTE);
 	_mainWindow.setPosition(TeVector3f32(0.0f, 0.0f, 0.0f));
+	_mainWindow.setName("TeEngine Application");
 
 	TeResourceManager *resmgr = g_engine->getResourceManager();
 	TeCore *core = g_engine->getCore();
@@ -307,7 +309,8 @@ void Application::startGame(bool newGame, int difficulty) {
 }
 
 void Application::resume() {
-	error("TODO: Implement Application::resume");
+	// Probably not needed.
+	error("Implement Application::resume");
 }
 
 bool Application::run() {
@@ -326,6 +329,7 @@ bool Application::run() {
 
 		renderer->reset();
 		game->update();
+		game->scene().updateScroll();
 		g_engine->getSoundManager()->update();
 		performRender();
 		if (game->_returnToMainMenu) {
@@ -344,20 +348,20 @@ bool Application::run() {
 				TeLuaGUI finalGui;
 				finalGui.load("finalURL.lua");
 				/*TeVariant finalVal =*/ finalGui.value("finalURL");
+				// Not clear if this variant is ever used in original.
 				debug("TODO: use final URL??");
-				// TODO: Not clear if this variant is ever used in original.
 				finalGui.unload();
 			}
 			_finishedGame = false;
 		}
-		InGameScene::updateScroll();
 		TeObject::deleteNow();
 	}
 	return true;
 }
 
 void Application::suspend() {
-	error("TODO: Implement Application::suspend");
+	// Probably not needed.
+	error("Implement Application::suspend");
 }
 
 void Application::showNoCellIcon(bool show) {
@@ -383,7 +387,8 @@ void Application::showLoadingIcon(bool show) {
 }
 
 void Application::saveCorrupted(const Common::String &fname) {
-	error("TODO: Implement Application::showLoadingIcon");
+	// Probably not needed.
+	error("Implement Application::saveCorrupted");
 }
 
 void Application::drawBack() {
@@ -502,7 +507,8 @@ bool Application::isFading() {
 }
 
 bool Application::onBlackFadeAnimationFinished() {
-	error("TODO: Implement Application::onBlackFadeAnimationFinished");
+	_visFade._blackFadeSprite.setVisible(false);
+	_visFade._buttonLayout.setVisible(false);
 	return false;
 }
 
@@ -543,13 +549,13 @@ void Application::lockCursorFromAction(bool lock) {
 }
 
 void Application::loadOptions(const Common::String &fname) {
-	// TODO: Maybe load options here - original uses an
-	// xml file but we would want confman.
-	debug("TODO: Implement Application::loadOptions %s", fname.c_str());
+	// Probably not needed.  We sync confman in addArtworkUnlocked.
+	debug("Application::loadOptions %s", fname.c_str());
 }
 
 void Application::saveOptions(const Common::String &fname) {
-	debug("TODO: Implement Application::saveOptions %s", fname.c_str());
+	// Probably not needed.  We sync confman in addArtworkUnlocked.
+	debug("Application::saveOptions %s", fname.c_str());
 }
 
 Common::String Application::getHelpText(const Common::String &key) {
@@ -557,7 +563,8 @@ Common::String Application::getHelpText(const Common::String &key) {
 }
 
 const char *Application::inAppUnlockFullVersionID() {
-	error("TODO: Implement Application::inAppUnlockFullVersionID");
+	// Probably not needed.
+	error("Implement Application::inAppUnlockFullVersionID");
 }
 
 } // end namespace Tetraedge

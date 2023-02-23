@@ -140,6 +140,7 @@ public:
 	void loadBundledImages();
 	byte *getPaletteFromNeoImage(Common::SeekableReadStream *stream, int offset);
 	Graphics::Surface *loadAndConvertNeoImage(Common::SeekableReadStream *stream, int offset, byte *palette = nullptr);
+	Graphics::Surface *loadAndCenterScrImage(Common::SeekableReadStream *stream);
 	void loadPalettes(Common::SeekableReadStream *file, int offset);
 	void swapPalette(uint16 areaID);
 	Common::HashMap<uint16, byte *> _paletteByArea;
@@ -164,6 +165,12 @@ public:
 	void load8bitBinary(Common::SeekableReadStream *file, int offset, int ncolors);
 	Area *load8bitArea(Common::SeekableReadStream *file, uint16 ncolors);
 	Object *load8bitObject(Common::SeekableReadStream *file);
+	void renderPixels8bitBinImage(Graphics::Surface *surface, int &i, int &j, uint8 pixels, int color);
+
+	void renderPixels8bitBinCGAImage(Graphics::Surface *surface, int &i, int &j, uint8 pixels, int color);
+	void renderPixels8bitBinEGAImage(Graphics::Surface *surface, int &i, int &j, uint8 pixels, int color);
+
+	Graphics::Surface *load8bitBinImage(Common::SeekableReadStream *file, int offset);
 
 	// Areas
 	uint16 _startArea;
@@ -437,6 +444,10 @@ private:
 	void drawCPCUI(Graphics::Surface *surface);
 	void drawC64UI(Graphics::Surface *surface);
 	void drawAmigaAtariSTUI(Graphics::Surface *surface);
+
+	Graphics::Surface *load8bitTitleImage(Common::SeekableReadStream *file, int offset);
+	uint32 getPixel8bitTitleImage(int index);
+	void renderPixels8bitTitleImage(Graphics::Surface *surface, int &i, int &j, int pixels);
 };
 
 class DarkEngine : public FreescapeEngine {
@@ -449,6 +460,7 @@ public:
 	void loadAssets() override;
 	void initGameState() override;
 	void borderScreen() override;
+	void titleScreen() override;
 
 	void gotoArea(uint16 areaID, int entranceID) override;
 	void checkIfStillInArea() override;
@@ -476,6 +488,7 @@ public:
 	EclipseEngine(OSystem *syst, const ADGameDescription *gd);
 
 	void loadAssets() override;
+	void titleScreen() override;
 
 	void gotoArea(uint16 areaID, int entranceID) override;
 

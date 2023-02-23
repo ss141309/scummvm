@@ -31,7 +31,8 @@ namespace ViewsEnh {
 Game::Game() : TextView("Game"),
 		_view(this),
 		_commands(this),
-		_messages(this) {
+		_messages(this),
+		_party(this) {
 	_view.setBounds(Common::Rect(8, 15, 224, 130));
 
 	// Load the Xeen background
@@ -67,20 +68,9 @@ bool Game::msgKeypress(const KeypressMessage &msg) {
 
 bool Game::msgAction(const ActionMessage &msg) {
 	switch (msg._action) {
-	case KEYBIND_VIEW_PARTY1:
-	case KEYBIND_VIEW_PARTY2:
-	case KEYBIND_VIEW_PARTY3:
-	case KEYBIND_VIEW_PARTY4:
-	case KEYBIND_VIEW_PARTY5:
-	case KEYBIND_VIEW_PARTY6:
-	{
-		uint charNum = msg._action - KEYBIND_VIEW_PARTY1;
-		if (charNum < g_globals->_party.size()) {
-			g_globals->_currCharacter = &g_globals->_party[charNum];
-			addView("CharacterInfo");
-		}
-		break;
-	}
+	case KEYBIND_SPELL:
+		addView("CastSpell");
+		return true;
 	default:
 		break;
 	}

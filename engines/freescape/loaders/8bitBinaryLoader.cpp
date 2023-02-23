@@ -298,6 +298,141 @@ static const char *eclipseRoomName[] = {
 	"ILLUSION",
 	"????????"};
 
+byte kCGAPalettePinkBlueWhiteData[4][3] = {
+	{0x00, 0x00, 0x00},
+	{0x55, 0xff, 0xff},
+	{0xff, 0x55, 0xff},
+	{0xff, 0xff, 0xff},
+};
+
+byte kEGADefaultPaletteData[16][3] = {
+	{0x00, 0x00, 0x00},
+	{0x00, 0x00, 0xaa},
+	{0x00, 0xaa, 0x00},
+	{0xaa, 0x00, 0x00},
+	{0xaa, 0x00, 0xaa},
+	{0xaa, 0x55, 0x00},
+	{0x55, 0xff, 0x55},
+	{0xff, 0x55, 0x55},
+	{0x12, 0x34, 0x56},
+	{0xff, 0xff, 0x55},
+	{0xff, 0xff, 0xff},
+	{0x00, 0x00, 0x00},
+	{0x00, 0x00, 0x00},
+	{0x00, 0x00, 0x00},
+	{0x00, 0x00, 0x00}
+};
+
+void FreescapeEngine::renderPixels8bitBinImage(Graphics::Surface *surface, int &i, int &j, uint8 pixels, int color) {
+	if (i >= 320) {
+		//debug("cannot continue, stopping here at row %d!", j);
+		return;
+	}
+
+	int acc = 1 << 7;
+	while (acc > 0) {
+		assert(i < 320);
+		if (acc & pixels) {
+			uint8 r, g, b;
+			uint32 previousPixel = surface->getPixel(i, j);
+			_gfx->_currentPixelFormat.colorToRGB(previousPixel, r, g, b);
+			int previousColor = _gfx->indexFromColor(r, g, b);
+			//debug("index: %d", previousColor + color);
+			_gfx->readFromPalette(previousColor + color, r, g, b);
+			surface->setPixel(i, j, _gfx->_currentPixelFormat.ARGBToColor(0xFF, r, g, b));
+		}
+		i++;
+		acc = acc >> 1;
+	}
+
+}
+
+Graphics::Surface *FreescapeEngine::load8bitBinImage(Common::SeekableReadStream *file, int offset) {
+	Graphics::Surface *surface = new Graphics::Surface();
+	if (_renderMode == Common::kRenderCGA)
+		_gfx->_palette = (byte *)kCGAPalettePinkBlueWhiteData;
+	else if (_renderMode == Common::kRenderEGA)
+		_gfx->_palette = (byte *)kEGADefaultPaletteData;
+	else
+		error("Invalid render mode: %d", _renderMode);
+
+	surface->create(_screenW, _screenH, _gfx->_currentPixelFormat);
+	uint32 black = _gfx->_currentPixelFormat.ARGBToColor(0xFF, 0, 0, 0);
+	surface->fillRect(Common::Rect(0, 0, 320, 200), black);
+
+	file->seek(offset);
+	int imageSize = file->readUint16BE();
+
+	int i = 0;
+	int j = 0;
+	int hPixelsWritten = 0;
+	int color = 1;
+	int command = 0;
+	while (file->pos() <= offset + imageSize) {
+		//debug("pos: %lx", file->pos());
+		command = file->readByte();
+
+		color = 1 + hPixelsWritten / 320;
+		//debug("command: %x with j: %d", command, j);
+		if (j >= 200)
+			return surface;
+
+		if (command <= 0x7f) {
+			//debug("starting singles at i: %d j: %d", i, j);
+			int start = i;
+			while (command-- >= 0) {
+				int pixels = file->readByte();
+				//debug("single pixels command: %d with pixels: %x", command, pixels);
+				renderPixels8bitBinImage(surface, i, j, pixels, color);
+			}
+			hPixelsWritten = hPixelsWritten + i - start;
+		} else if (command <= 0xff && command >= 0xf0) {
+			int size = (136 - 8*(command - 0xf0)) / 2;
+			int start = i;
+			int pixels = file->readByte();
+			//debug("starting 0xfX: at i: %d j: %d with pixels: %x", i, j, pixels);
+			while (size > 0) {
+				renderPixels8bitBinImage(surface, i, j, pixels, color);
+				size = size - 4;
+			}
+			hPixelsWritten = hPixelsWritten + i - start;
+			assert(i <= 320);
+		} else if (command <= 0xef && command >= 0xe0) {
+			int size = (264 - 8*(command - 0xe0)) / 2;
+			int start = i;
+			int pixels = file->readByte();
+			//debug("starting 0xeX: at i: %d j: %d with pixels: %x", i, j, pixels);
+			while (size > 0) {
+				renderPixels8bitBinImage(surface, i, j, pixels, color);
+				size = size - 4;
+			}
+			hPixelsWritten = hPixelsWritten + i - start;
+		} else if (command <= 0xdf && command >= 0xd0) {
+			int size = (272 + 8*(0xdf - command)) / 2;
+			int start = i;
+			int pixels = file->readByte();
+			while (size > 0) {
+				renderPixels8bitBinImage(surface, i, j, pixels, color);
+				size = size - 4;
+			}
+			hPixelsWritten = hPixelsWritten + i - start;
+		} else {
+			error("unknown command: %x", command);
+		}
+
+		if (i >= 320) {
+			i = 0;
+			if (hPixelsWritten >= (_renderMode == Common::kRenderCGA ? 640 : 1280)) {
+				j++;
+				hPixelsWritten = 0;
+			}
+		}
+
+
+	}
+	return surface;
+}
+
 Area *FreescapeEngine::load8bitArea(Common::SeekableReadStream *file, uint16 ncolors) {
 
 	Common::String name;

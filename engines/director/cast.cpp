@@ -42,24 +42,6 @@
 
 namespace Director {
 
-const char *scriptTypes[] = {
-	"ScoreScript",
-	"CastScript",
-	"MovieScript",
-	"EventScript",
-	"TestScript"
-};
-
-const char *scriptType2str(ScriptType scr) {
-	if (scr < 0)
-		return "NoneScript";
-
-	if (scr > kMaxScriptType)
-		return "<unknown>";
-
-	return scriptTypes[scr];
-}
-
 Cast::Cast(Movie *movie, uint16 castLibID, bool isShared) {
 	_movie = movie;
 	_vm = _movie->getVM();
@@ -607,7 +589,7 @@ void Cast::loadCast() {
 			if (debugChannelSet(-1, kDebugFewFramesOnly))
 				warning("Compiling STXT %d", *iterator);
 
-			loadScriptText(*(r = _castArchive->getResource(MKTAG('S','T','X','T'), *iterator)), *iterator - _castIDoffset);
+			loadScriptV2(*(r = _castArchive->getResource(MKTAG('S','T','X','T'), *iterator)), *iterator - _castIDoffset);
 			delete r;
 		}
 
@@ -1262,7 +1244,12 @@ void Cast::loadLingoContext(Common::SeekableReadStreamEndian &stream) {
 	}
 }
 
-void Cast::loadScriptText(Common::SeekableReadStreamEndian &stream, uint16 id) {
+void Cast::loadScriptV2(Common::SeekableReadStreamEndian &stream, uint16 id) {
+	// In Director 2 (and Director 3 with compatibility mode), any text cast
+	// member which begins with a comment "--" gets parsed as a movie script.
+	// In this mode, fewer top-level keywords are recognised; this is indicated
+	// by passing kLPPForceD2 to the Lingo preprocessor.
+
 	/*uint32 unk1 = */ stream.readUint32();
 	uint32 strLen = stream.readUint32();
 	/*uin32 dataLen = */ stream.readUint32();
@@ -1276,10 +1263,7 @@ void Cast::loadScriptText(Common::SeekableReadStreamEndian &stream, uint16 id) {
 	if (ConfMan.getBool("dump_scripts"))
 		dumpScript(script.c_str(), kMovieScript, id);
 
-	if (script.contains("\nmenu:") || script.hasPrefix("menu:"))
-		return;
-
-	_lingoArchive->addCode(script.decode(Common::kMacRoman), kMovieScript, id);
+	_lingoArchive->addCode(script.decode(Common::kMacRoman), kMovieScript, id, nullptr, kLPPForceD2);
 }
 
 void Cast::dumpScript(const char *script, ScriptType type, uint16 id) {
@@ -1540,7 +1524,7 @@ Common::String Cast::formatCastSummary(int castId = -1) {
 		CastMemberInfo *castMemberInfo = getCastMemberInfo(*it);
 		Common::String info = castMember->formatInfo();
 		result += Common::String::format("%5d: type=%s, name=\"%s\"",
-			*it, castTypeToString(castMember->_type).c_str(),
+			*it, castType2str(castMember->_type),
 			castMemberInfo ? castMemberInfo->name.c_str() : ""
 		);
 

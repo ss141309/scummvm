@@ -56,6 +56,7 @@
 
 #include "gui/gui-manager.h"
 #include "gui/error.h"
+#include "gui/message.h"
 
 #include "audio/mididrv.h"
 #include "audio/musicplugin.h"  /* for music manager */
@@ -90,6 +91,10 @@
 
 #ifdef USE_UPDATES
 #include "gui/updates-dialog.h"
+#endif
+
+#ifdef __ANDROID__
+#include "backends/fs/android/android-fs-factory.h"
 #endif
 
 static bool launcherDialog() {
@@ -506,10 +511,11 @@ extern "C" int scummvm_main(int argc, const char * const argv[]) {
 	if (settings.contains("initial-cfg"))
 		initConfigFilename = settings["initial-cfg"];
 
+	bool configLoadStatus;
 	if (settings.contains("config")) {
-		ConfMan.loadConfigFile(settings["config"], initConfigFilename);
+		configLoadStatus = ConfMan.loadConfigFile(settings["config"], initConfigFilename);
 	} else {
-		ConfMan.loadDefaultConfigFile(initConfigFilename);
+		configLoadStatus = ConfMan.loadDefaultConfigFile(initConfigFilename);
 	}
 
 	// Update the config file
@@ -633,6 +639,11 @@ extern "C" int scummvm_main(int argc, const char * const argv[]) {
 	}
 	setupGraphics(system);
 
+	if (!configLoadStatus) {
+		GUI::MessageDialog alert(_("Bad config file format. overwrite?"), _("Yes"), _("Cancel"));
+		if (alert.runModal() != GUI::kMessageOK)
+   			return 0;
+	}
 	// Init the different managers that are used by the engines.
 	// Do it here to prevent fragmentation later
 	system.getAudioCDManager();
@@ -662,6 +673,72 @@ extern "C" int scummvm_main(int argc, const char * const argv[]) {
 	if (!ConfMan.hasKey("updates_check") && g_system->getUpdateManager()) {
 		GUI::UpdatesDialog dlg;
 		dlg.runModal();
+	}
+#endif
+
+#ifdef __ANDROID__
+	// This early popup message for Android, informing the users about important
+	// changes to file access, needs to be *after* language for the GUI has been selected.
+	// Hence, we instantiate GUI Manager here, to take care of this.
+	GUI::GuiManager::instance();
+	if (AndroidFilesystemFactory::instance().hasSAF()
+		&& !ConfMan.hasKey("android_saf_dialog_shown")) {
+
+		bool cancelled = false;
+
+		if (!ConfMan.getGameDomains().empty()) {
+			GUI::MessageDialog alert(_(
+				// I18N: <Add a new folder> must match the translation done in backends/fs/android/android-saf-fs.h
+				"In this new version of ScummVM Android, significant changes were made to "
+				"the file access system to allow support for modern versions of the Android "
+				"Operating System.\n"
+				"If you find that your existing added games or custom paths no longer work, "
+				"please edit those paths and this time use the SAF system to browse to the "
+				"desired locations.\n"
+				"To do that:\n"
+				"\n"
+				"  1. For each game whose data is not found, go to the \"Paths\" tab in "
+				"the \"Game Options\" and change the \"Game path\"\n"
+				"  2. Inside the ScummVM file browser, use \"Go Up\" until you reach "
+				"the \"root\" folder where you will see the \"<Add a new folder>\" option.\n"
+				"  3. Choose that, then browse and select the \"parent\" folder for your "
+				"games subfolders, e.g. \"SD Card > myGames\". Click on \"Use this folder\".\n"
+				"  4. Then, a new folder \"myGames\" will appear on the \"root\" folder "
+				"of the ScummVM browser.\n"
+				"  5. Browse through this folder to your game data.\n"
+				"\n"
+				"Steps 2 and 3 need to be done only once for all of your games."
+				), _("Ok"),
+				// I18N: A button caption to dismiss amessage and read it later
+				_("Read Later"), Graphics::kTextAlignLeft);
+
+			if (alert.runModal() != GUI::kMessageOK)
+				cancelled = true;
+		} else {
+			GUI::MessageDialog alert(_(
+				// I18N: <Add a new folder> must match the translation done in backends/fs/android/android-saf-fs.h
+				"In this new version of ScummVM Android, significant changes were made to "
+				"the file access system to allow support for modern versions of the Android "
+				"Operating System.\n"
+				"Thus, you need to set up SAF in order to be able to add the games.\n"
+				"\n"
+				"  1. Inside the ScummVM file browser, use \"Go Up\" until you reach "
+				"the \"root\" folder where you will see the \"<Add a new folder>\" option.\n"
+				"  2. Choose that, then browse and select the \"parent\" folder for your "
+				"games subfolders, e.g. \"SD Card > myGames\". Click on \"Use this folder\".\n"
+				"  3. Then, a new folder \"myGames\" will appear on the \"root\" folder "
+				"of the ScummVM browser.\n"
+				"  4. Browse through this folder to your game data."
+				), _("Ok"),
+				// I18N: A button caption to dismiss a message and read it later
+				_("Read Later"), Graphics::kTextAlignLeft);
+
+			if (alert.runModal() != GUI::kMessageOK)
+				cancelled = true;
+		}
+
+		if (!cancelled)
+			ConfMan.setBool("android_saf_dialog_shown", true);
 	}
 #endif
 

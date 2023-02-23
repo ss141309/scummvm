@@ -32,6 +32,7 @@
 #include "tetraedge/game/character.h"
 #include "tetraedge/game/characters_shadow.h"
 #include "tetraedge/game/object3d.h"
+#include "tetraedge/game/particle_xml_parser.h"
 #include "tetraedge/game/scene_lights_xml_parser.h"
 
 #include "tetraedge/te/te_bezier_curve.h"
@@ -51,9 +52,23 @@ namespace Tetraedge {
 /*static*/
 bool InGameScene::_collisionSlide = false;
 
+/*static*/
+const int InGameScene::MAX_FIRE = 50;
+const int InGameScene::MAX_SNOW = 250;
+const int InGameScene::MAX_SMOKE = 350;
+const float InGameScene::DUREE_MAX_FIRE = 32000.0f;
+const float InGameScene::SCALE_FIRE = 0.1f;
+const int InGameScene::MAX_FLAKE = 10;
+const float InGameScene::DUREE_MIN_FLAKE = 3000.0f;
+const float InGameScene::DUREE_MAX_FLAKE = 5000.0f;
+const float InGameScene::SCALE_FLAKE = 0.1f;
+const float InGameScene::DEPTH_MAX_FLAKE = 0.1f;
+
+
 InGameScene::InGameScene() : _character(nullptr), _charactersShadow(nullptr),
 _shadowLightNo(-1), _waitTime(-1.0f), _shadowColor(0, 0, 0, 0x80), _shadowFov(20.0f),
-_shadowFarPlane(1000), _shadowNearPlane(1), _maskAlpha(false) {
+_shadowFarPlane(1000), _shadowNearPlane(1), _maskAlpha(false),
+_verticalScrollTime(1000000.0f), _verticalScrollPlaying(false) {
 }
 
 void InGameScene::activateAnchorZone(const Common::String &name, bool val) {
@@ -79,7 +94,7 @@ void InGameScene::addAnchorZone(const Common::String &s1, const Common::String &
 	zone->_activated = true;
 
 	if (s1.contains("Int")) {
-		TeButtonLayout *btn = hitObjectGui().buttonLayout(name);
+		TeButtonLayout *btn = hitObjectGui().buttonLayoutChecked(name);
 		TeVector3f32 pos = btn->position();
 		pos.x() += g_engine->getDefaultScreenWidth() / 2.0f;
 		pos.y() += g_engine->getDefaultScreenHeight() / 2.0f;
@@ -174,8 +189,11 @@ Billboard *InGameScene::billboard(const Common::String &name) {
 }
 
 bool InGameScene::changeBackground(const Common::String &name) {
-	if (Common::File::exists(name)) {
-		_bgGui.spriteLayoutChecked("root")->load(name);
+	Common::FSNode node = g_engine->getCore()->findFile(name);
+	if (node.isReadable()) {
+		_bgGui.spriteLayoutChecked("root")->load(node);
+		if (g_engine->gameType() == TetraedgeEngine::kSyberia2)
+			_bgGui.spriteLayoutChecked("root")->play();
 		return true;
 	}
 	return false;
@@ -349,12 +367,13 @@ void InGameScene::deserializeModel(Common::ReadStream &stream, TeIntrusivePtr<Te
 }
 
 void InGameScene::draw() {
-	TeScene::draw();
-
 	if (currentCameraIndex() >= (int)cameras().size())
 		return;
 
 	currentCamera()->apply();
+
+	drawMask();
+	drawReflection();
 
 #ifdef TETRAEDGE_DEBUG_PATHFINDING
 	if (_character && _character->curve()) {
@@ -378,6 +397,52 @@ void InGameScene::draw() {
 		_lights[i]->update(i);
 
 	TeCamera::restore();
+
+	drawKate();
+
+	TeScene::draw();
+}
+
+void InGameScene::drawKate() {
+	if (_rippleMasks.size())
+		error("TODO: Implement InGameScene::drawKate");
+}
+
+void InGameScene::drawMask() {
+	if (_masks.empty())
+		return;
+
+	TeIntrusivePtr<TeCamera> cam = currentCamera();
+	if (!cam)
+		return;
+
+	cam->apply();
+
+	TeRenderer *rend = g_engine->getRenderer();
+	if (!_maskAlpha)
+		rend->colorMask(false, false, false, false);
+
+	for (auto mask : _masks)
+		mask->draw();
+
+	if (!_maskAlpha)
+		rend->colorMask(true, true, true, true);
+}
+
+void InGameScene::drawReflection() {
+	if (_rippleMasks.empty() || currentCameraIndex() >= (int)cameras().size())
+		return;
+
+	currentCamera()->apply();
+	if (!_maskAlpha)
+		g_engine->getRenderer()->colorMask(false, false, false, false);
+
+	for (uint i = _rippleMasks.size() - 1; i > 0; i--) {
+		_rippleMasks[i]->draw();
+	}
+
+	if (!_maskAlpha)
+		g_engine->getRenderer()->colorMask(true, true, true, true);
 }
 
 void InGameScene::drawPath() {
@@ -435,7 +500,8 @@ InGameScene::SoundStep InGameScene::findSoundStep(const Common::String &name) {
 
 void InGameScene::freeGeometry() {
 	_loadedPath.set("");
-
+	_youkiManager.reset();
+	freeSceneObjects();
 	for (TeFreeMoveZone *zone : _freeMoveZones)
 		delete zone;
 	_freeMoveZones.clear();
@@ -444,6 +510,10 @@ void InGameScene::freeGeometry() {
 	cameras().clear();
 	_zoneModels.clear();
 	_masks.clear();
+	_shadowReceivingObjects.clear();
+	if (_charactersShadow)
+		_charactersShadow->destroy();
+	_sceneLights.clear();
 	if (_charactersShadow) {
 		delete _charactersShadow;
 		_charactersShadow = nullptr;
@@ -479,8 +549,17 @@ void InGameScene::freeSceneObjects() {
 	}
 	_sprites.clear();
 
+	// TODO: Clean up snows, waterCones, smokes, snowCones
+
 	deleteAllCallback();
 	_markers.clear();
+
+	// TODO: Clean up randomAnims
+
+	for (RippleMask *rmask : _rippleMasks) {
+		delete rmask;
+	}
+	_rippleMasks.clear();
 
 	for (InGameScene::AnchorZone *zone : _anchorZones) {
 		delete zone;
@@ -525,7 +604,7 @@ Common::String InGameScene::imagePathMarker(const Common::String &name) {
 }
 
 void InGameScene::initScroll() {
-	_someScrollVector = TeVector2f32(0.5f, 0.0f);
+	_scrollOffset = TeVector2f32(0.5f, 0.0f);
 }
 
 bool InGameScene::isMarker(const Common::String &name) {
@@ -542,6 +621,21 @@ bool InGameScene::isObjectBlocking(const Common::String &name) {
 			return true;
 	}
 	return false;
+}
+
+TeVector2f32 InGameScene::layerSize() {
+	TeLayout *bglayout = _bgGui.layout("background");
+	TeVector3f32 sz;
+	if (bglayout) {
+		TeLayout *rootlayout = Game::findSpriteLayoutByName(bglayout, "root");
+		if (!rootlayout)
+			error("InGameScene::layerSize: No root layout inside the background");
+		sz = rootlayout->size();
+		_scrollScale = TeVector2f32(sz.x(), sz.y());
+	} else {
+		sz = g_engine->getApplication()->getMainWindow().size();
+	}
+	return TeVector2f32(sz.x(), sz.y());
 }
 
 bool InGameScene::load(const Common::FSNode &sceneNode) {
@@ -694,6 +788,35 @@ bool InGameScene::loadXml(const Common::String &zone, const Common::String &scen
 	if (!parser.parse())
 		error("InGameScene::loadXml: Can't parse %s", node.getPath().c_str());
 
+	// loadFlamme and loadSnowCustom are handled by the above.
+
+	_charactersShadow = CharactersShadow::makeInstance();
+	_charactersShadow->create(this);
+
+	for (uint i = 0; i < _lights.size(); i++)
+		_lights[i]->disable(i);
+	_lights.clear();
+	_shadowLightNo = -1;
+
+	const Common::Path lightspath = getLightsFileName();
+	TeCore *core = g_engine->getCore();
+	const Common::FSNode lightsNode(core->findFile(lightspath));
+	if (lightsNode.isReadable())
+		loadLights(lightsNode);
+
+	// TODO: Should we set particle matrix to current cam matrix here?
+	// If we are loading a new scene it seems redundant..
+	Common::Path pxmlpath = _sceneFileNameBase(zone, scene).joinInPlace("particles.xml");
+	Common::FSNode pnode = g_engine->getCore()->findFile(pxmlpath);
+	if (pnode.isReadable()) {
+		ParticleXmlParser pparser;
+		pparser._scene = this;
+		if (!pparser.loadFile(pnode))
+			error("InGameScene::loadXml: Can't load %s", pnode.getPath().c_str());
+		if (!pparser.parse())
+			error("InGameScene::loadXml: Can't parse %s", pnode.getPath().c_str());
+	}
+
 	return true;
 }
 
@@ -837,7 +960,8 @@ bool InGameScene::loadObjectMaterials(const Common::String &name) {
 }
 
 bool InGameScene::loadObjectMaterials(const Common::String &path, const Common::String &name) {
-	error("TODO: InGameScene::loadObjectMaterials(%s, %s)", path.c_str(), name.c_str());
+	// Seems like this is never used?
+	error("InGameScene::loadObjectMaterials(%s, %s)", path.c_str(), name.c_str());
 }
 
 bool InGameScene::loadPlayerCharacter(const Common::String &name) {
@@ -861,9 +985,23 @@ bool InGameScene::loadPlayerCharacter(const Common::String &name) {
 	return true;
 }
 
+bool InGameScene::loadCurve(const Common::String &name) {
+	const Common::Path path = _sceneFileNameBase().joinInPlace(name).appendInPlace(".bin");
+	TeCore *core = g_engine->getCore();
+	Common::FSNode node = core->findFile(path);
+	if (!node.isReadable()) {
+		warning("[InGameScene::loadCurve] Can't open file : %s.", path.toString().c_str());
+		return false;
+	}
+	TeIntrusivePtr<TeBezierCurve> curve = new TeBezierCurve();
+	curve->loadBin(node);
+	_bezierCurves.push_back(curve);
+	return true;
+}
+
 bool InGameScene::loadDynamicLightBloc(const Common::String &name, const Common::String &texture, const Common::String &zone, const Common::String &scene) {
-	const Common::Path pdat = Common::Path(zone).joinInPlace(scene).joinInPlace(name).appendInPlace(".bin");
-	const Common::Path ptex = Common::Path(zone).joinInPlace(scene).joinInPlace(texture);
+	const Common::Path pdat = _sceneFileNameBase(zone, scene).joinInPlace(name).appendInPlace(".bin");
+	const Common::Path ptex = _sceneFileNameBase(zone, scene).joinInPlace(texture);
 	Common::FSNode datnode = g_engine->getCore()->findFile(pdat);
 	Common::FSNode texnode = g_engine->getCore()->findFile(ptex);
 	if (!datnode.isReadable()) {
@@ -889,16 +1027,16 @@ bool InGameScene::loadDynamicLightBloc(const Common::String &name, const Common:
 	TeMesh *mesh = model->meshes()[0].get();
 	mesh->setConf(verts, tricount * 3, TeMesh::MeshMode_Triangles, 0, 0);
 
-	TeVector3f32 vec;
-	TeVector2f32 vec2;
 	for (uint i = 0; i < verts; i++) {
+		TeVector3f32 vec;
 		TeVector3f32::deserialize(file, vec);
 		mesh->setVertex(i, vec);
 		mesh->setNormal(i, TeVector3f32(0, 0, 1));
 	}
 	for (uint i = 0; i < verts; i++) {
+		TeVector2f32 vec2;
 		TeVector2f32::deserialize(file, vec2);
-		vec.y() = 1.0 - vec.y();
+		vec2.setY(1.0 - vec2.getY());
 		mesh->setTextureUV(i, vec2);
 	}
 
@@ -921,8 +1059,24 @@ bool InGameScene::loadDynamicLightBloc(const Common::String &name, const Common:
 	return true;
 }
 
-bool InGameScene::loadLight(const Common::String &fname, const Common::String &zone, const Common::String &scene) {
-	warning("TODO: Implement InGameScene::loadLight");
+bool InGameScene::loadLight(const Common::String &name, const Common::String &zone, const Common::String &scene) {
+	Common::Path datpath = _sceneFileNameBase(zone, scene).joinInPlace(name).appendInPlace(".bin");
+	Common::FSNode datnode = g_engine->getCore()->findFile(datpath);
+	if (!datnode.isReadable()) {
+		warning("[InGameScene::loadLight] Can't open file : %s.", datpath.toString().c_str());
+		return false;
+	}
+
+	Common::File file;
+	file.open(datnode);
+	SceneLight light;
+	light._name = name;
+	TeVector3f32::deserialize(file, light._v1);
+	TeVector3f32::deserialize(file, light._v2);
+	light._color.deserialize(file);
+	light._f = file.readFloatLE();
+
+	_sceneLights.push_back(light);
 	return true;
 }
 
@@ -953,19 +1107,20 @@ bool InGameScene::loadMask(const Common::String &name, const Common::String &tex
 	TeMesh *mesh = model->meshes()[0].get();
 	mesh->setConf(verts, tricount * 3, TeMesh::MeshMode_Triangles, 0, 0);
 
-	TeVector3f32 vec;
-	TeVector2f32 vec2;
 	for (uint i = 0; i < verts; i++) {
+		TeVector3f32 vec;
 		TeVector3f32::deserialize(file, vec);
 		mesh->setVertex(i, vec);
 		mesh->setNormal(i, TeVector3f32(0, 0, 1));
 		if (_maskAlpha) {
-			mesh->setColor(TeColor(255, 255, 255, 128));
+			mesh->setColor(i, TeColor(255, 255, 255, 128));
 		}
 	}
+
 	for (uint i = 0; i < verts; i++) {
+		TeVector2f32 vec2;
 		TeVector2f32::deserialize(file, vec2);
-		vec.y() = 1.0 - vec.y();
+		vec2.setY(1.0 - vec2.getY());
 		mesh->setTextureUV(i, vec2);
 	}
 
@@ -978,16 +1133,20 @@ bool InGameScene::loadMask(const Common::String &name, const Common::String &tex
 
 	file.close();
 	Common::FSNode texnode = core->findFile(texpath);
-	TeIntrusivePtr<Te3DTexture> tex = Te3DTexture::makeInstance();
-	tex->load2(texnode, !_maskAlpha);
-	mesh->defaultMaterial(tex);
+	TeIntrusivePtr<Te3DTexture> tex = Te3DTexture::load2(texnode, !_maskAlpha);
 
-	if (!_maskAlpha) {
-		mesh->materials()[0]._mode = TeMaterial::MaterialMode2;
+	if (tex) {
+		mesh->defaultMaterial(tex);
+		if (!_maskAlpha) {
+			mesh->materials()[0]._mode = TeMaterial::MaterialMode2;
+		}
+
+		_masks.push_back(model);
+		return true;
+	} else {
+		warning("Failed to load mask texture %s", texture.c_str());
+		return false;
 	}
-
-	_masks.push_back(model);
-	return true;
 }
 
 bool InGameScene::loadRBB(const Common::String &fname, const Common::String &zone, const Common::String &scene) {
@@ -1010,13 +1169,87 @@ bool InGameScene::loadShadowMask(const Common::String &name, const Common::Strin
 	return true;
 }
 
-bool InGameScene::loadShadowReceivingObject(const Common::String &fname, const Common::String &zone, const Common::String &scene) {
-	warning("TODO: Implement InGameScene::loadShadowReceivingObject");
+bool InGameScene::loadShadowReceivingObject(const Common::String &name, const Common::String &zone, const Common::String &scene) {
+	Common::Path datpath = _sceneFileNameBase(zone, scene).joinInPlace(name).appendInPlace(".bin");
+	Common::FSNode datnode = g_engine->getCore()->findFile(datpath);
+	if (!datnode.isReadable()) {
+		warning("[InGameScene::loadShadowReceivingObject] Can't open file : %s.", datpath.toString().c_str());
+		return false;
+	}
+	TeModel *model = new TeModel();
+	model->setMeshCount(1);
+	model->setName(name);
+
+	Common::File file;
+	file.open(datnode);
+
+	// Load position, rotation, size.
+	Te3DObject2::deserialize(file, *model, false);
+
+	uint32 verts = file.readUint32LE();
+	uint32 tricount = file.readUint32LE();
+	if (verts > 100000 || tricount > 10000)
+		error("Improbable number of verts (%d) or triangles (%d)", verts, tricount);
+
+	TeMesh *mesh = model->meshes()[0].get();
+	mesh->setConf(verts, tricount * 3, TeMesh::MeshMode_Triangles, 0, 0);
+
+	for (uint i = 0; i < verts; i++) {
+		TeVector3f32 vec;
+		TeVector3f32::deserialize(file, vec);
+		mesh->setVertex(i, vec);
+		mesh->setNormal(i, TeVector3f32(0, 0, 1));
+	}
+
+	// Indexes in reverse order :(
+	for (uint i = 0; i < tricount * 3; i += 3) {
+		mesh->setIndex(i + 2, file.readUint16LE());
+		mesh->setIndex(i + 1, file.readUint16LE());
+		mesh->setIndex(i, file.readUint16LE());
+	}
+
+	_shadowReceivingObjects.push_back(model);
 	return true;
 }
 
-bool InGameScene::loadZBufferObject(const Common::String &fname, const Common::String &zone, const Common::String &scene) {
-	warning("TODO: Implement InGameScene::loadZBufferObject");
+bool InGameScene::loadZBufferObject(const Common::String &name, const Common::String &zone, const Common::String &scene) {
+	Common::Path datpath = _sceneFileNameBase(zone, scene).joinInPlace(name).appendInPlace(".bin");
+	Common::FSNode datnode = g_engine->getCore()->findFile(datpath);
+	if (!datnode.isReadable()) {
+		warning("[InGameScene::loadZBufferObject] Can't open file : %s.", datpath.toString().c_str());
+		return false;
+	}
+	TeModel *model = new TeModel();
+	model->setMeshCount(1);
+	model->setName(name);
+
+	Common::File file;
+	file.open(datnode);
+
+	// Load position, rotation, size.
+	Te3DObject2::deserialize(file, *model, false);
+
+	uint32 verts = file.readUint32LE();
+	uint32 tricount = file.readUint32LE();
+	if (verts > 100000 || tricount > 10000)
+		error("Improbable number of verts (%d) or triangles (%d)", verts, tricount);
+
+	TeMesh *mesh = model->meshes()[0].get();
+	mesh->setConf(verts, tricount * 3, TeMesh::MeshMode_Triangles, 0, 0);
+
+	for (uint i = 0; i < verts; i++) {
+		TeVector3f32 vec;
+		TeVector3f32::deserialize(file, vec);
+		mesh->setVertex(i, vec);
+		mesh->setNormal(i, TeVector3f32(0, 0, 1));
+		mesh->setColor(i, TeColor(128, 0, 255, 128));
+	}
+
+	for (uint i = 0; i < tricount * 3; i++) {
+		mesh->setIndex(i, file.readUint16LE());
+	}
+
+	_zoneModels.push_back(model);
 	return true;
 }
 
@@ -1076,6 +1309,7 @@ void InGameScene::loadBlockers() {
 }
 
 void InGameScene::loadBackground(const Common::FSNode &node) {
+	_youkiManager.reset();
 	_bgGui.load(node);
 	TeLayout *bg = _bgGui.layout("background");
 	TeLayout *root = _bgGui.layout("root");
@@ -1172,7 +1406,18 @@ TeFreeMoveZone *InGameScene::pathZone(const Common::String &name) {
 	return nullptr;
 }
 
+void InGameScene::playVerticalScrolling(float time) {
+	_verticalScrollTimer.start();
+	_verticalScrollTimer.stop();
+	_verticalScrollTimer.start();
+	_verticalScrollTime = time * 1000000.0f;
+	_verticalScrollPlaying = true;
+}
+
 void InGameScene::reset() {
+	for (auto *character : _characters)
+		character->setFreeMoveZone(nullptr);
+	_youkiManager.reset();
 	if (_character)
 		_character->setFreeMoveZone(nullptr);
 	freeSceneObjects();
@@ -1269,7 +1514,7 @@ void InGameScene::unloadCharacter(const Common::String &name) {
 		_character->deleteAnim();
 		_character->deleteAllCallback();
 		if (_character->_model->anim())
-		_character->_model->anim()->stop(); // TODO: added this
+			_character->_model->anim()->stop(); // TODO: added this
 		_character->setFreeMoveZone(nullptr); // TODO: added this
 		// TODO: deleteLater() something here..
 		_character = nullptr;
@@ -1374,6 +1619,7 @@ void InGameScene::update() {
 	}
 
 	TeScene::update();
+	_youkiManager.update();
 
 	float waitTime = _waitTimeTimer.timeFromLastTimeElapsed();
 	if (_waitTime != -1.0 && waitTime > _waitTime) {
@@ -1393,6 +1639,14 @@ void InGameScene::update() {
 			game->luaScript().execute("OnWaitFinished");
 	}
 
+	// TODO: Update Flammes
+
+	// Original does this, but snowCustoms are never actually created?
+	//for (auto snow : _snowCustoms)
+	//	snow->addFlake();
+
+	TeParticle::updateAll(1);
+
 	for (Object3D *obj : _object3Ds) {
 		if (obj->_translateTime >= 0) {
 			float time = MIN((float)(obj->_translateTimer.getTimeFromStart() / 1000000.0), obj->_translateTime);
@@ -1406,6 +1660,118 @@ void InGameScene::update() {
 			obj->model()->setRotation(obj->_rotateStart * rotq);
 		}
 	}
+}
+
+void InGameScene::updateScroll() {
+	if (g_engine->gameType() != TetraedgeEngine::kSyberia2)
+		return;
+
+	TeLayout *bg = _bgGui.layout("background");
+	if (!bg)
+		return;
+
+	TeSpriteLayout *root = Game::findSpriteLayoutByName(bg, "root");
+	if (!root)
+		error("No root layout in the background");
+	_scrollOffset = TeVector2f32();
+	TeIntrusivePtr<TeTiledTexture> rootTex = root->_tiledSurfacePtr->tiledTexture();
+	const TeVector2s32 texSize = rootTex->totalSize();
+	if (texSize._x < 801) {
+		if (texSize._y < 601) {
+			_scrollOffset = TeVector2f32(0.5f, 0.0f);
+			updateViewport(0);
+		} else {
+			TeVector3f32 usersz = bg->userSize();
+			usersz.y() = 2.333333f;
+			bg->setSize(usersz);
+			//TeVector2f32 boundLayerSz = boundLayerSize();
+			layerSize();
+
+			float y1 = 300.0f / texSize._y;
+			float y2 = (texSize._y - 300.0f) / texSize._y;
+
+			if (_verticalScrollPlaying) {
+				float elapsed = _verticalScrollTimer.timeFromLastTimeElapsed();
+				_scrollOffset.setY(elapsed * (y2 - y1) / _verticalScrollTime + y1);
+			} else if (_character && _character->_model) {
+				TeIntrusivePtr<TeCamera> cam = currentCamera();
+				const TeMatrix4x4 camProjMatrix = cam->projectionMatrix();
+				TeMatrix4x4 camWorldMatrix = cam->worldTransformationMatrix();
+				camWorldMatrix.inverse();
+				const TeMatrix4x4 camProjWorld = camProjMatrix * camWorldMatrix;
+				TeVector3f32 charPos = camProjWorld * _character->_model->position();
+				_scrollOffset.setY(1.0f - (charPos.y() + 1.0f));
+			}
+			_scrollOffset.setX(0.5f);
+			_scrollOffset.setY(CLIP(_scrollOffset.getY(), y1, y2));
+			if (_scrollOffset.getY() >= y2 && _verticalScrollPlaying) {
+				_verticalScrollTimer.stop();
+				_verticalScrollPlaying = false;
+			}
+			root->setAnchor(TeVector3f32(0.5f, _scrollOffset.getY(), 0.5f));
+			updateViewport(2);
+		}
+	} else {
+		TeVector3f32 usersz = bg->userSize();
+		usersz.x() = texSize._x / 800.0f;
+		bg->setSize(usersz);
+		//TeVector2f32 boundLayerSz = boundLayerSize();
+		TeVector2f32 layerSz = layerSize();
+		float x1, x2;
+		if (g_engine->getApplication()->ratioStretched()) {
+			x1 = layerSz.getX() * 2;
+			const TeVector3f32 winSize = g_engine->getApplication()->getMainWindow().size();
+			x2 = winSize.x();
+		} else {
+			x1 = layerSz.getX() * 2;
+			x2 = layerSz.getX();
+		}
+		TeIntrusivePtr<TeCamera> cam = currentCamera();
+		if (cam) {
+			const TeMatrix4x4 camProjMatrix = cam->projectionMatrix();
+			TeMatrix4x4 camWorldMatrix = cam->worldTransformationMatrix();
+			camWorldMatrix.inverse();
+			const TeMatrix4x4 camProjWorld = camProjMatrix * camWorldMatrix;
+			const TeVector3f32 charPos = camProjWorld * _character->_model->position();
+			_scrollOffset.setX((charPos.x() + 1.0f) / 2.0f);
+			float xmin = x2 / x1;
+			float xmax = 1.0f - (x2 / x1);
+			_scrollOffset.setX(CLIP(_scrollOffset.getX(), xmin, xmax));
+			root->setAnchor(TeVector3f32(_scrollOffset.getX(), 0.5f, 0.5f));
+			TeLayout *forbg = g_engine->getGame()->forGui().layoutChecked("background");
+			forbg->setAnchor(TeVector3f32(_scrollOffset.getX(), 0.5f, 0.5f));
+			updateViewport(1);
+			// _globalScrollingType = 1;  // This gets set but never used?
+		}
+	}
+}
+
+void InGameScene::updateViewport(int ival) {
+	const TeVector2f32 lsize = layerSize();
+	const TeVector2f32 offset((0.5f - _scrollOffset.getX()) * _scrollScale.getX(),
+							_scrollOffset.getY() * _scrollScale.getY());
+	const TeVector3f32 winSize = g_engine->getApplication()->getMainWindow().size();
+	float aspectRatio = lsize.getX() / lsize.getY();
+	for (auto cam : cameras()) {
+		//cam->setSomething(ival);
+		int x = (winSize.x() - lsize.getX()) / 2.0f + offset.getX();
+		int y = (winSize.y() - lsize.getY()) / 2.0f;
+		cam->viewport(x, y, lsize.getX(), lsize.getY());
+		if (g_engine->getApplication()->ratioStretched()) {
+			aspectRatio = (aspectRatio / (winSize.x() / winSize.y())) * 1.333333f;
+		}
+		cam->setAspectRatio(aspectRatio);
+	}
+}
+
+void InGameScene::activateMask(const Common::String &name, bool val) {
+	for (auto mask : _masks) {
+		if (mask->name() == name) {
+			mask->setVisible(val);
+			return;
+		}
+	}
+	warning("activateMask: Didn't find mask %s", name.c_str());
 }
 
 bool InGameScene::AnimObject::onFinished() {
@@ -1424,6 +1790,20 @@ bool InGameScene::AnimObject::onFinished() {
 	}
 	game->luaScript().execute("OnFinishedAnim", _name);
 	return false;
+}
+
+void InGameScene::Flamme::initFire() {
+	_needsFires = true;
+	_fires.resize(MAX_FIRE);
+}
+
+InGameScene::Flamme::~Flamme() {
+	for (auto fire : _fires) {
+		if (fire) {
+			delete fire;
+		}
+	}
+	_fires.clear();
 }
 
 } // end namespace Tetraedge
